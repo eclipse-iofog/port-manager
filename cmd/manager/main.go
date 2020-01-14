@@ -37,9 +37,18 @@ func main() {
 
 	printVersion()
 
+	// Get namespace from environment variable
 	namespace, err := k8sutil.GetWatchNamespace()
 	if err != nil {
 		log.Error(err, "Failed to get watch namespace")
+		os.Exit(1)
+	}
+
+	// Get Controller access token from environment variable
+	tokenVar := "IOFOG_CONTROLLER_TOKEN"
+	token := os.Getenv(tokenVar)
+	if token == "" {
+		log.Error(nil, tokenVar+" env var not set")
 		os.Exit(1)
 	}
 
@@ -72,9 +81,8 @@ func main() {
 	}()
 
 	// Run
-	if err = manager.New(namespace, cfg).Run(); err != nil {
+	if err = manager.New(namespace, token, cfg).Run(); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}
 }
-
