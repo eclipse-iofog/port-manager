@@ -14,9 +14,9 @@ ifeq ($(VERBOSE), 1)
 	GOARGS += -v
 endif
 
-GOLANG_VERSION = 1.11
+GOLANG_VERSION = 1.12
 
-GOFILES_NOVENDOR = $(shell find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./client/*")
+GOFILES_NOVENDOR = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
 
 .PHONY: clean

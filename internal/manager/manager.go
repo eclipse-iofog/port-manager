@@ -58,7 +58,7 @@ func (mgr *Manager) Run() (err error) {
 		// Check ports
 		msvcs, err := ioClient.GetAllMicroservices()
 		if err != nil {
-			continue
+			return err
 		}
 
 		// Create/update resources based on microservice port state
