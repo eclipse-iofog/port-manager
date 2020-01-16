@@ -213,12 +213,16 @@ func (mgr *Manager) updateProxy(msvc ioclient.MicroserviceInfo) error {
 	svc := &corev1.Service{}
 	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, dep); err == nil {
 		// Service found, update ports
+		svc = newProxyService(mgr.watchNamespace, msvc.Name, msvc.Ports)
+		if err := mgr.k8sClient.Update(context.TODO(), svc); err != nil {
+			return err
+		}
 	} else {
 		if !k8serrors.IsNotFound(err) {
 			return err
 		}
 		// Service not found, create one
-		svc = newProxyService(mgr.watchNamespace, msvc.Name, msvcPort)
+		svc = newProxyService(mgr.watchNamespace, msvc.Name, msvc.Ports)
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
 		}
