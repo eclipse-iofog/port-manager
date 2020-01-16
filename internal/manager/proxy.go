@@ -37,18 +37,11 @@ func newProxyDeployment(namespace, msvcName, config string, image string, replic
 							Image: image,
 							Command: []string{
 								"node",
-								"/opt/app-root/bin/icproxy.js",
+							},
+							Args: []string{
+								"/opt/app-root/bin/simple.js",
 								config,
 							},
-							//Args:
-							//Ports:
-							//Env: []corev1.EnvVar{
-							//	{
-							//		Name: "ICPROXY_CONFIG",
-							//	},
-							//},
-							//Resources:
-							//ReadinessProbe:  &corev1.Probe{},
 							ImagePullPolicy: corev1.PullAlways,
 						},
 					},
