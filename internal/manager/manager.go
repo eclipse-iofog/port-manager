@@ -2,7 +2,6 @@ package manager
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -163,6 +162,26 @@ func (mgr *Manager) updateProxy(msvc ioclient.MicroserviceInfo) error {
 				config = fmt.Sprintf("%s,%s", config, createProxyConfig(msvc.Name, msvc.UUID, msvcPort.External))
 			}
 		}
+		// Remove any old ports from the config
+		configPorts, err := decodeConfig(config)
+		if err != nil {
+			return err
+		}
+		for _, configPort := range configPorts {
+			found := false
+			for _, msvcPort := range msvc.Ports {
+				if configPort == msvcPort.External {
+					found = true
+					break
+				}
+			}
+			if !found {
+				// Remove port from config
+				rmvSubstr := createProxyConfig(msvc.Name, msvc.UUID, configPort)
+				config = strings.Replace(config, ","+rmvSubstr, "", 1)
+				config = strings.Replace(config, rmvSubstr, "", 1)
+			}
+		}
 		// Update the deployment
 		if err := updateProxyConfig(dep, config); err != nil {
 			return err
@@ -192,7 +211,9 @@ func (mgr *Manager) updateProxy(msvc ioclient.MicroserviceInfo) error {
 
 	// Service
 	svc := &corev1.Service{}
-	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, dep); err != nil {
+	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, dep); err == nil {
+		// Service found, update ports
+	} else {
 		if !k8serrors.IsNotFound(err) {
 			return err
 		}
