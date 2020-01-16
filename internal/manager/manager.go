@@ -3,13 +3,10 @@ package manager
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -126,19 +123,6 @@ func (mgr *Manager) handleCachedMicroservice(msvc ioclient.MicroserviceInfo) err
 	return nil
 }
 
-func (mgr *Manager) handleNewMicroservice(msvc ioclient.MicroserviceInfo) error {
-	// Microservice is not in cache
-	mgr.msvcPorts[msvc.UUID] = make(map[int]bool)
-	// Add ports to cache
-	for _, msvcPort := range msvc.Ports {
-		// Add resources for new ports
-		// ...
-		// Add port to cache
-		mgr.msvcPorts[msvc.UUID][msvcPort.External] = true
-	}
-	return nil
-}
-
 func (mgr *Manager) updateProxy(msvc ioclient.MicroserviceInfo) error {
 	// Key to check resources don't already exist
 	proxyKey := k8sclient.ObjectKey{
@@ -147,85 +131,15 @@ func (mgr *Manager) updateProxy(msvc ioclient.MicroserviceInfo) error {
 	}
 
 	// Deployment
-	dep := &appsv1.Deployment{}
-	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, dep); err == nil {
-		// Deployment found
-		// Read the existing deployment's config
-		config, err := getProxyConfig(dep)
-		if err != nil {
-			return err
-		}
-		// Add any new ports to the config
-		for _, msvcPort := range msvc.Ports {
-			if !strings.Contains(config, strconv.Itoa(msvcPort.External)) {
-				// Update config string
-				config = fmt.Sprintf("%s,%s", config, createProxyConfig(msvc.Name, msvc.UUID, msvcPort.External))
-			}
-		}
-		// Remove any old ports from the config
-		configPorts, err := decodeConfig(config)
-		if err != nil {
-			return err
-		}
-		for _, configPort := range configPorts {
-			found := false
-			for _, msvcPort := range msvc.Ports {
-				if configPort == msvcPort.External {
-					found = true
-					break
-				}
-			}
-			if !found {
-				// Remove port from config
-				rmvSubstr := createProxyConfig(msvc.Name, msvc.UUID, configPort)
-				config = strings.Replace(config, ","+rmvSubstr, "", 1)
-				config = strings.Replace(config, rmvSubstr, "", 1)
-			}
-		}
-		// Update the deployment
-		if err := updateProxyConfig(dep, config); err != nil {
-			return err
-		}
-		if err := mgr.k8sClient.Update(context.TODO(), dep); err != nil {
-			return err
-		}
-	} else {
-		if !k8serrors.IsNotFound(err) {
-			return err
-		}
-		// Deployment not found, create one
-		// Generate config
-		config := ""
-		for idx, msvcPort := range msvc.Ports {
-			separator := ""
-			if idx != 0 {
-				separator = ","
-			}
-			config = fmt.Sprintf("%s%s%s", config, separator, createProxyConfig(msvc.Name, msvc.UUID, msvcPort.External))
-		}
-		dep = newProxyDeployment(mgr.watchNamespace, msvc.Name, config, proxyImage, 1)
-		if err := mgr.k8sClient.Create(context.TODO(), dep); err != nil {
-			return err
-		}
+	dep := newProxyDeployment(mgr.watchNamespace, msvc.Name, createProxyConfig(&msvc), proxyImage, 1)
+	if err := mgr.createOrUpdate(proxyKey, dep); err != nil {
+		return err
 	}
 
 	// Service
-	svc := &corev1.Service{}
-	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, dep); err == nil {
-		// Service found, update ports
-		svc = newProxyService(mgr.watchNamespace, msvc.Name, msvc.Ports)
-		if err := mgr.k8sClient.Update(context.TODO(), svc); err != nil {
-			return err
-		}
-	} else {
-		if !k8serrors.IsNotFound(err) {
-			return err
-		}
-		// Service not found, create one
-		svc = newProxyService(mgr.watchNamespace, msvc.Name, msvc.Ports)
-		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
-			return err
-		}
+	svc := newProxyService(mgr.watchNamespace, msvc.Name, msvc.Ports)
+	if err := mgr.createOrUpdate(proxyKey, svc); err != nil {
+		return err
 	}
 
 	// Update cache with new ports
@@ -234,5 +148,24 @@ func (mgr *Manager) updateProxy(msvc ioclient.MicroserviceInfo) error {
 		mgr.msvcPorts[msvc.UUID][msvcPort.External] = true
 	}
 
+	return nil
+}
+
+func (mgr *Manager) createOrUpdate(objKey k8sclient.ObjectKey, obj runtime.Object) error {
+	found := obj.DeepCopyObject()
+	if err := mgr.k8sClient.Get(context.TODO(), objKey, found); err == nil {
+		// Service found, update ports
+		if err := mgr.k8sClient.Update(context.TODO(), obj); err != nil {
+			return err
+		}
+	} else {
+		if !k8serrors.IsNotFound(err) {
+			return err
+		}
+		// Service not found, create one
+		if err := mgr.k8sClient.Create(context.TODO(), obj); err != nil {
+			return err
+		}
+	}
 	return nil
 }
