@@ -5,6 +5,8 @@ go 1.12
 require (
 	github.com/eclipse-iofog/iofog-go-sdk v1.3.0
 	github.com/operator-framework/operator-sdk v0.10.0
+	k8s.io/api v0.0.0-20190612125737-db0771252981
+	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad
 	k8s.io/client-go v11.0.0+incompatible
 	sigs.k8s.io/controller-runtime v0.1.10
 )
