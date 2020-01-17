@@ -34,6 +34,7 @@ type Manager struct {
 	msvcPorts      map[string]map[int]bool
 	k8sClient      k8sclient.Client
 	log            logr.Logger
+	owner          metav1.OwnerReference
 }
 
 func New(watchNamespace, iofogUserEmail, iofogUserPass string, config *rest.Config) *Manager {
@@ -48,6 +49,24 @@ func New(watchNamespace, iofogUserEmail, iofogUserPass string, config *rest.Conf
 	}
 }
 
+func (mgr *Manager) getOwnerReference() error {
+	objKey := k8sclient.ObjectKey{
+		Name:      "port-manager",
+		Namespace: mgr.watchNamespace, // TODO: get actual namespace port-manager deployed in
+	}
+	dep := appsv1.Deployment{}
+	if err := mgr.k8sClient.Get(context.TODO(), objKey, &dep); err != nil {
+		return err
+	}
+	mgr.owner = metav1.OwnerReference{
+		APIVersion: "extensions/v1beta1",
+		Kind:       "Deployment",
+		Name:       dep.Name,
+		UID:        dep.UID,
+	}
+	return nil
+}
+
 func (mgr *Manager) Run() (err error) {
 	// Instantiate Kubernetes client
 	mgr.k8sClient, err = k8sclient.New(mgr.config, k8sclient.Options{})
@@ -55,6 +74,12 @@ func (mgr *Manager) Run() (err error) {
 		return err
 	}
 	mgr.log.Info("Created Kubernetes client")
+
+	// Get owner reference
+	if err := mgr.getOwnerReference(); err != nil {
+		return err
+	}
+	mgr.log.Info("Got owner reference from Kubernetes API Server")
 
 	// Instantiate ioFog client
 	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.watchNamespace, controllerPort)
@@ -106,8 +131,6 @@ func (mgr *Manager) Run() (err error) {
 				if err := mgr.deleteProxy(cachedMsvc); err != nil {
 					return err
 				}
-				// Remove microservice from cache
-				delete(mgr.msvcPorts, cachedMsvc)
 			}
 		}
 
@@ -159,6 +182,9 @@ func (mgr *Manager) deleteProxy(msvcName string) error {
 	if err := mgr.delete(proxyKey, svc); err != nil {
 		return err
 	}
+
+	// Remove microservice from cache
+	delete(mgr.msvcPorts, msvcName)
 	return nil
 }
 
@@ -171,12 +197,14 @@ func (mgr *Manager) updateProxy(msvc ioclient.MicroserviceInfo) error {
 
 	// Deployment
 	dep := newProxyDeployment(mgr.watchNamespace, msvc.Name, createProxyConfig(&msvc), proxyImage, 1)
+	mgr.setOwnerReference(dep)
 	if err := mgr.createOrUpdate(proxyKey, dep); err != nil {
 		return err
 	}
 
 	// Service
 	svc := newProxyService(mgr.watchNamespace, msvc.Name, msvc.Ports)
+	mgr.setOwnerReference(svc)
 	if err := mgr.createOrUpdate(proxyKey, svc); err != nil {
 		return err
 	}
@@ -219,8 +247,8 @@ func (mgr *Manager) createOrUpdate(objKey k8sclient.ObjectKey, obj runtime.Objec
 	return nil
 }
 
-func (mgr *Manager) setOwnerReference(obj runtime.Object) error {
-	return nil
+func (mgr *Manager) setOwnerReference(obj metav1.Object) {
+	obj.SetOwnerReferences([]metav1.OwnerReference{mgr.owner})
 }
 
 func hasPublicPorts(msvc ioclient.MicroserviceInfo) bool {
