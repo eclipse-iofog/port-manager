@@ -55,15 +55,6 @@ func newProxyService(namespace, msvcName string, msvcPorts []ioclient.Microservi
 	labels := map[string]string{
 		"name": getProxyName(msvcName),
 	}
-	ports := make([]corev1.ServicePort, 0)
-	for _, msvcPort := range msvcPorts {
-		ports = append(ports, corev1.ServicePort{
-			Name:       "proxy",
-			Port:       int32(msvcPort.External),
-			TargetPort: intstr.FromInt(msvcPort.External),
-			Protocol:   corev1.Protocol("TCP"),
-		})
-	}
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getProxyName(msvcName),
@@ -74,9 +65,25 @@ func newProxyService(namespace, msvcName string, msvcPorts []ioclient.Microservi
 			Type:                  corev1.ServiceTypeLoadBalancer,
 			ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyTypeLocal,
 			Selector:              labels,
-			Ports:                 ports,
+			Ports:                 getServicePorts(msvcPorts),
 		},
 	}
+}
+
+func getServicePorts(msvcPorts []ioclient.MicroservicePortMapping) []corev1.ServicePort {
+	ports := make([]corev1.ServicePort, 0)
+	for _, msvcPort := range msvcPorts {
+		if msvcPort.External == 0 {
+			continue
+		}
+		ports = append(ports, corev1.ServicePort{
+			Name:       "proxy",
+			Port:       int32(msvcPort.External),
+			TargetPort: intstr.FromInt(msvcPort.External),
+			Protocol:   corev1.Protocol("TCP"),
+		})
+	}
+	return ports
 }
 
 func getProxyName(msvcName string) string {
@@ -86,6 +93,9 @@ func getProxyName(msvcName string) string {
 func createProxyConfig(msvc *ioclient.MicroserviceInfo) string {
 	config := ""
 	for idx, msvcPort := range msvc.Ports {
+		if msvcPort.External == 0 {
+			continue
+		}
 		separator := ""
 		if idx != 0 {
 			separator = ","
