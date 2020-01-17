@@ -5,12 +5,19 @@ import (
 	"fmt"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	ioclient "github.com/eclipse-iofog/iofog-go-sdk/pkg/client"
+
+	"github.com/go-logr/logr"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -26,15 +33,18 @@ type Manager struct {
 	iofogUserPass  string
 	msvcPorts      map[string]map[int]bool
 	k8sClient      k8sclient.Client
+	log            logr.Logger
 }
 
 func New(watchNamespace, iofogUserEmail, iofogUserPass string, config *rest.Config) *Manager {
+	logf.SetLogger(logf.ZapLogger(false))
 	return &Manager{
 		watchNamespace: watchNamespace,
 		config:         config,
 		iofogUserEmail: iofogUserEmail,
 		iofogUserPass:  iofogUserPass,
 		msvcPorts:      make(map[string]map[int]bool),
+		log:            logf.Log.WithName("port-manager"),
 	}
 }
 
@@ -44,6 +54,7 @@ func (mgr *Manager) Run() (err error) {
 	if err != nil {
 		return err
 	}
+	mgr.log.Info("Created Kubernetes client")
 
 	// Instantiate ioFog client
 	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.watchNamespace, controllerPort)
@@ -51,15 +62,18 @@ func (mgr *Manager) Run() (err error) {
 	if err != nil {
 		return err
 	}
+	mgr.log.Info("Logged into Controller API")
 
 	// Watch Controller API
 	for {
 		time.Sleep(time.Second * 4)
+		mgr.log.Info("Polling Controller API")
 		// Check ports
 		msvcs, err := ioClient.GetAllMicroservices()
 		if err != nil {
 			return err
 		}
+		mgr.log.Info(fmt.Sprintf("Found %d Microservices", len(msvcs.Microservices)))
 
 		// Create/update resources based on microservice port state
 		for _, msvc := range msvcs.Microservices {
@@ -71,8 +85,10 @@ func (mgr *Manager) Run() (err error) {
 				}
 			} else {
 				// Microservice not stored in cache
-				if err := mgr.updateProxy(msvc); err != nil {
-					return err
+				if hasPublicPorts(msvc) {
+					if err := mgr.updateProxy(msvc); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -86,7 +102,10 @@ func (mgr *Manager) Run() (err error) {
 			}
 			// Cached microservice not found in backend
 			if !found {
-				//TODO: Delete resources
+				// Delete resources from K8s API Server
+				if err := mgr.deleteProxy(cachedMsvc); err != nil {
+					return err
+				}
 				// Remove microservice from cache
 				delete(mgr.msvcPorts, cachedMsvc)
 			}
@@ -123,6 +142,26 @@ func (mgr *Manager) handleCachedMicroservice(msvc ioclient.MicroserviceInfo) err
 	return nil
 }
 
+func (mgr *Manager) deleteProxy(msvcName string) error {
+	proxyKey := k8sclient.ObjectKey{
+		Name:      getProxyName(msvcName),
+		Namespace: mgr.watchNamespace,
+	}
+	meta := metav1.ObjectMeta{
+		Name:      getProxyName(msvcName),
+		Namespace: mgr.watchNamespace,
+	}
+	dep := &appsv1.Deployment{ObjectMeta: meta}
+	if err := mgr.delete(proxyKey, dep); err != nil {
+		return err
+	}
+	svc := &corev1.Service{ObjectMeta: meta}
+	if err := mgr.delete(proxyKey, svc); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (mgr *Manager) updateProxy(msvc ioclient.MicroserviceInfo) error {
 	// Key to check resources don't already exist
 	proxyKey := k8sclient.ObjectKey{
@@ -151,6 +190,16 @@ func (mgr *Manager) updateProxy(msvc ioclient.MicroserviceInfo) error {
 	return nil
 }
 
+func (mgr *Manager) delete(objKey k8sclient.ObjectKey, obj runtime.Object) error {
+	if err := mgr.k8sClient.Delete(context.Background(), obj); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return err
+		}
+		return err
+	}
+	return nil
+}
+
 func (mgr *Manager) createOrUpdate(objKey k8sclient.ObjectKey, obj runtime.Object) error {
 	found := obj.DeepCopyObject()
 	if err := mgr.k8sClient.Get(context.TODO(), objKey, found); err == nil {
@@ -168,4 +217,17 @@ func (mgr *Manager) createOrUpdate(objKey k8sclient.ObjectKey, obj runtime.Objec
 		}
 	}
 	return nil
+}
+
+func (mgr *Manager) setOwnerReference(obj runtime.Object) error {
+	return nil
+}
+
+func hasPublicPorts(msvc ioclient.MicroserviceInfo) bool {
+	for _, msvcPort := range msvc.Ports {
+		if msvcPort.External != 0 {
+			return true
+		}
+	}
+	return false
 }

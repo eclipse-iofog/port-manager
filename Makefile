@@ -39,6 +39,10 @@ fmt:
 test:
 	set -o pipefail; go list -mod=vendor ./... | xargs -n1 go test -mod=vendor $(GOARGS) -v -parallel 1 2>&1 | tee test.txt
 
+.PHONY: vendor
+vendor: # Vendor all deps
+	@go mod vendor
+
 .PHONY: build-img
 build-img:
 	docker build -t eclipse-iofog/port-manager:latest -f build/Dockerfile .
