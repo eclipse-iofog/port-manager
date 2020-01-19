@@ -127,7 +127,7 @@ func (mgr *Manager) Run() (err error) {
 		}
 
 		// Delete resources for erased microservices
-		// Build map to avoid O(N^2) algorithm where N is msvc count
+		// Build map to avoid O(N^2) time complexity where N is msvc count
 		backendMsvcs := make(map[string]*ioclient.MicroserviceInfo)
 		for _, msvc := range msvcs.Microservices {
 			backendMsvcs[msvc.UUID] = &msvc
@@ -153,7 +153,7 @@ func (mgr *Manager) Run() (err error) {
 // Update K8s resources for a Microservice found in this runtime's cache
 func (mgr *Manager) handleCachedMicroservice(msvc ioclient.MicroserviceInfo) error {
 	// Find any newly added ports
-	// Build map to avoid O(N^2) algorithm where N is msvc port count
+	// Build map to avoid O(N^2) time complexity where N is msvc port count
 	cachedPorts := buildPortMap(mgr.msvcCache[msvc.UUID].Ports)
 	for _, msvcPort := range msvc.Ports {
 		if _, exists := cachedPorts[msvcPort.External]; !exists {
@@ -162,7 +162,7 @@ func (mgr *Manager) handleCachedMicroservice(msvc ioclient.MicroserviceInfo) err
 		}
 	}
 	// Find any removed ports
-	// Build map to avoid O(N^2) algorithm where N is msvc port count
+	// Build map to avoid O(N^2) time complexity where N is msvc port count
 	backendPorts := buildPortMap(msvc.Ports)
 	for cachedPort := range cachedPorts {
 		if _, exists := backendPorts[cachedPort]; !exists {
