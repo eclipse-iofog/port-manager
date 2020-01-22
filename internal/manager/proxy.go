@@ -57,9 +57,13 @@ func newProxyDeployment(namespace, config string, image string, replicas int32) 
 	}
 }
 
-func newProxyService(namespace, msvcName, msvcUUID string, msvcPorts []ioclient.MicroservicePortMapping) *corev1.Service {
+func newProxyService(namespace string, msvcs []*ioclient.MicroserviceInfo) *corev1.Service {
 	labels := map[string]string{
 		"name": proxyName,
+	}
+	ports := make([]corev1.ServicePort, 0)
+	for _, msvc := range msvcs {
+		ports = append(ports, generateServicePorts(msvc.Name, msvc.UUID, msvc.Ports)...)
 	}
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -71,22 +75,24 @@ func newProxyService(namespace, msvcName, msvcUUID string, msvcPorts []ioclient.
 			Type:                  corev1.ServiceTypeLoadBalancer,
 			ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyTypeLocal,
 			Selector:              labels,
-			Ports:                 generateServicePorts(msvcName, msvcUUID, msvcPorts),
+			Ports:                 ports,
 		},
 	}
 }
 
-func createProxyConfig(msvc *ioclient.MicroserviceInfo) string {
+func createProxyConfig(msvcs []*ioclient.MicroserviceInfo) string {
 	config := ""
-	for idx, msvcPort := range msvc.Ports {
-		if msvcPort.External == 0 {
-			continue
+	for msvcIdx, msvc := range msvcs {
+		for _, msvcPort := range msvc.Ports {
+			if msvcPort.External == 0 {
+				continue
+			}
+			separator := ""
+			if msvcIdx != 0 {
+				separator = ","
+			}
+			config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(msvc.Name, msvc.UUID, msvcPort.External))
 		}
-		separator := ""
-		if idx != 0 {
-			separator = ","
-		}
-		config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(msvc.Name, msvc.UUID, msvcPort.External))
 	}
 	return config
 }
