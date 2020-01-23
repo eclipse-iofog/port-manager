@@ -336,6 +336,8 @@ func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment, msvcs []*
 	if err != nil {
 		return err
 	}
+	// Record config to check for changes later
+	existingConfig := config
 
 	for _, msvc := range msvcs {
 		configPorts, err := decodePorts(config, msvc.Name, msvc.UUID)
@@ -374,6 +376,11 @@ func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment, msvcs []*
 	// Remove leading comma
 	if config[0] == ',' {
 		config = config[1:]
+	}
+
+	// No changes to config, don't update
+	if config == existingConfig {
+		return nil
 	}
 
 	// Save the config to deployment
