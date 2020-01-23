@@ -150,6 +150,36 @@ func decodePorts(config, msvcName, msvcUUID string) (ports map[int]bool, err err
 	return decodeConfig(config, "http:", fmt.Sprintf("=>amqp:%s-%s", msvcName, msvcUUID))
 }
 
+func decodeMicroservice(configItem string) (msvcPort int, msvcName, msvcUUID string, err error) {
+	// http:{msvcPort}=>amqp:{msvcName-msvcUUID}
+	// Port
+	ports := between(configItem, "http:", "=>")
+	if len(ports) != 1 {
+		err = errors.New("Could not get port from config item " + configItem)
+		return
+	}
+	msvcPort, err = strconv.Atoi(ports[0])
+	if err != nil {
+		err = errors.New("Failed to convert port string to int: " + ports[0])
+		return
+	}
+	// Name and UUID
+	ids := strings.SplitAfter(configItem, "=>amqp:")
+	if len(ids) != 2 {
+		err = errors.New("Could not split after =>amqp: in config item " + configItem)
+		return
+	}
+	id := ids[1]
+	separatorIdx := strings.LastIndex(id, "-")
+	if separatorIdx == -1 || separatorIdx >= len(id)-1 {
+		err = errors.New("Could not find last index of - char in config item " + configItem)
+		return
+	}
+	msvcName = id[:separatorIdx]
+	msvcUUID = id[separatorIdx+1:]
+	return
+}
+
 // Find all substrings between a and b until end
 func between(value string, a string, b string) (substrs []string) {
 	substrs = make([]string, 0)

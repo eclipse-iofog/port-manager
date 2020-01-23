@@ -2,9 +2,7 @@ package manager
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -140,29 +138,10 @@ func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
 	configItems := strings.Split(config, ",")
 	for _, configItem := range configItems {
 		// Get microservice and port details from item
-		// http:{msvcPort}=>amqp:{msvcName-msvcUUID}
-		// Port
-		ports := between(configItem, "http:", "=>")
-		if len(ports) != 1 {
-			return errors.New("Could not get port from config item " + configItem)
-		}
-		msvcPort, err := strconv.Atoi(ports[0])
+		msvcPort, msvcName, msvcUUID, err := decodeMicroservice(configItem)
 		if err != nil {
-			return errors.New("Failed to convert port string to int: " + ports[0])
+			return err
 		}
-		// Name and UUID
-		ids := strings.SplitAfter(configItem, "=>amqp:")
-		if len(ids) != 2 {
-			return errors.New("Could not split after =>amqp: in config item " + configItem)
-		}
-		id := ids[1]
-		separatorIdx := strings.LastIndex(id, "-")
-		if separatorIdx == -1 || separatorIdx >= len(id)-1 {
-			return errors.New("Could not find last index of - char in config item " + configItem)
-		}
-		msvcName := id[:separatorIdx]
-		msvcUUID := id[separatorIdx+1:]
-
 		// Store microservices to cache (name, uuid, ports)
 		portMapping := ioclient.MicroservicePortMapping{
 			External: msvcPort,
