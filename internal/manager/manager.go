@@ -2,7 +2,9 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -97,7 +99,11 @@ func (mgr *Manager) Run() (err error) {
 	}
 	mgr.log.Info("Logged into Controller API")
 
-	// TODO: On first run, make sure controller api is reconciled with k8s api
+	// Initialize cache based on K8s API
+	if err := mgr.generateCache(ioClient); err != nil {
+		return err
+	}
+
 	// Watch Controller API
 	for {
 		time.Sleep(pollInterval)
@@ -105,6 +111,76 @@ func (mgr *Manager) Run() (err error) {
 			mgr.log.Error(err, "Run loop failed")
 		}
 	}
+}
+
+func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
+	mgr.log.Info("Generating cache based on Kubernetes API")
+
+	// Get deployment
+	proxyKey := k8sclient.ObjectKey{
+		Name:      proxyName,
+		Namespace: mgr.namespace,
+	}
+	foundDep := appsv1.Deployment{}
+	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, &foundDep); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return err
+		}
+		// Deployment not found, no ports open, nothing to cache
+		return nil
+	}
+
+	// Deployment exists, get the config
+	config, err := getProxyConfig(&foundDep)
+	if err != nil {
+		return err
+	}
+
+	// Get microservices from config
+	configItems := strings.Split(config, ",")
+	for _, configItem := range configItems {
+		// Get microservice and port details from item
+		// http:{msvcPort}=>amqp:{msvcName-msvcUUID}
+		// Port
+		ports := between(configItem, "http:", "=>")
+		if len(ports) != 1 {
+			return errors.New("Could not get port from config item " + configItem)
+		}
+		msvcPort, err := strconv.Atoi(ports[0])
+		if err != nil {
+			return errors.New("Failed to convert port string to int: " + ports[0])
+		}
+		// Name and UUID
+		ids := strings.SplitAfter(configItem, "=>amqp:")
+		if len(ids) != 2 {
+			return errors.New("Could not split after =>amqp: in config item " + configItem)
+		}
+		id := ids[1]
+		separatorIdx := strings.LastIndex(id, "-")
+		if separatorIdx == -1 || separatorIdx >= len(id)-1 {
+			return errors.New("Could not find last index of - char in config item " + configItem)
+		}
+		msvcName := id[:separatorIdx]
+		msvcUUID := id[separatorIdx+1:]
+
+		// Store microservices to cache (name, uuid, ports)
+		portMapping := ioclient.MicroservicePortMapping{
+			External: msvcPort,
+		}
+		// Update cache
+		if cachedMsvc, exists := mgr.msvcCache[msvcUUID]; exists {
+			cachedMsvc.Ports = append(cachedMsvc.Ports, portMapping)
+		} else {
+			mgr.msvcCache[msvcUUID] = &ioclient.MicroserviceInfo{
+				UUID: msvcUUID,
+				Name: msvcName,
+				Ports: []ioclient.MicroservicePortMapping{
+					portMapping,
+				},
+			}
+		}
+	}
+	return nil
 }
 
 func (mgr *Manager) run(ioClient *ioclient.Client) error {
