@@ -45,18 +45,20 @@ func main() {
 	}
 
 	// Get Controller access token from environment variable
-	creds := []string{
+	envs := []string{
 		"IOFOG_USER_EMAIL",
 		"IOFOG_USER_PASS",
+		"PROXY_IMAGE",
+		"ROUTER_ADDRESS",
 	}
-	for idx, envVar := range creds {
-		cred := os.Getenv(envVar)
-		if cred == "" {
+	for idx, envVar := range envs {
+		env := os.Getenv(envVar)
+		if env == "" {
 			log.Error(nil, envVar+" env var not set")
 			os.Exit(1)
 		}
 		// Store result for later
-		creds[idx] = cred
+		envs[idx] = env
 	}
 
 	// Get a config to talk to the apiserver
@@ -88,7 +90,7 @@ func main() {
 	}()
 
 	// Run
-	if err = manager.New(namespace, creds[0], creds[1], cfg).Run(); err != nil {
+	if err = manager.New(namespace, envs[0], envs[1], envs[2], envs[3], cfg).Run(); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}

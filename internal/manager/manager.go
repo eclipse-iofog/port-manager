@@ -23,7 +23,6 @@ import (
 const (
 	controllerServiceName = "controller"
 	controllerPort        = 51121
-	proxyImage            = "quay.io/skupper/icproxy"
 	managerName           = "port-manager"
 	pollInterval          = time.Second * 10
 )
@@ -37,9 +36,11 @@ type Manager struct {
 	k8sClient      k8sclient.Client
 	log            logr.Logger
 	owner          metav1.OwnerReference
+	proxyImage     string
+	routerAddress  string
 }
 
-func New(namespace, iofogUserEmail, iofogUserPass string, config *rest.Config) *Manager {
+func New(namespace, iofogUserEmail, iofogUserPass, proxyImage, routerAddress string, config *rest.Config) *Manager {
 	logf.SetLogger(logf.ZapLogger(false))
 	return &Manager{
 		namespace:      namespace,
@@ -48,6 +49,8 @@ func New(namespace, iofogUserEmail, iofogUserPass string, config *rest.Config) *
 		iofogUserPass:  iofogUserPass,
 		msvcCache:      make(map[string]*ioclient.MicroserviceInfo),
 		log:            logf.Log.WithName(managerName),
+		proxyImage:     proxyImage,
+		routerAddress:  routerAddress,
 	}
 }
 
@@ -81,7 +84,7 @@ func (mgr *Manager) Run() (err error) {
 	if err != nil {
 		return err
 	}
-	mgr.log.Info("Created Kubernetes client")
+	mgr.log.Info("Created Kubernetes clients")
 
 	// Get owner reference
 	if err := mgr.getOwnerReference(); err != nil {
@@ -310,7 +313,7 @@ func (mgr *Manager) updateProxy(msvcs []*ioclient.MicroserviceInfo) error {
 			return err
 		}
 		// Create new deployment
-		dep := newProxyDeployment(mgr.namespace, createProxyConfig(msvcs), proxyImage, 1)
+		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(msvcs), mgr.routerAddress)
 		mgr.setOwnerReference(dep)
 		if err := mgr.k8sClient.Create(context.TODO(), dep); err != nil {
 			return err

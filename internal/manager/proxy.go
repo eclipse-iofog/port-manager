@@ -17,7 +17,14 @@ const (
 	proxyName = "http-proxy"
 )
 
-func newProxyDeployment(namespace, config string, image string, replicas int32) *appsv1.Deployment {
+func getProxyContainerArgs(config string) []string {
+	return []string{
+		"node",
+		"/opt/app-root/bin/simple.js",
+		config,
+	}
+}
+func newProxyDeployment(namespace, image string, replicas int32, config, routerHost string) *appsv1.Deployment {
 	labels := map[string]string{
 		"name": proxyName,
 	}
@@ -39,16 +46,16 @@ func newProxyDeployment(namespace, config string, image string, replicas int32) 
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  "proxy",
-							Image: image,
-							Command: []string{
-								"node",
-							},
-							Args: []string{
-								"/opt/app-root/bin/simple.js",
-								config,
-							},
+							Name:            "proxy",
+							Image:           image,
+							Args:            getProxyContainerArgs(config),
 							ImagePullPolicy: corev1.PullAlways,
+							Env: []corev1.EnvVar{
+								{
+									Name:  "ICPROXY_BRIDGE_HOST",
+									Value: routerHost,
+								},
+							},
 						},
 					},
 				},
@@ -101,7 +108,7 @@ func updateProxyConfig(dep *appsv1.Deployment, config string) error {
 	if err := checkProxyDeployment(dep); err != nil {
 		return err
 	}
-	dep.Spec.Template.Spec.Containers[0].Args[1] = config
+	dep.Spec.Template.Spec.Containers[0].Args[len(getProxyContainerArgs(""))-1] = config
 	return nil
 }
 
@@ -121,8 +128,9 @@ func checkProxyDeployment(dep *appsv1.Deployment) error {
 	if len(containers) == 0 {
 		return errors.New("Proxy Deployment has no containers")
 	}
-	if len(containers[0].Args) != 2 {
-		return errors.New("Proxy Deployment argument length is not 2")
+	argCount := len(getProxyContainerArgs(""))
+	if len(containers[0].Args) != argCount {
+		return errors.New(fmt.Sprintf("Proxy Deployment argument length is not %d", argCount))
 	}
 	return nil
 }
