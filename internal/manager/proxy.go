@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	proxyName = "http-proxy"
+	proxyName   = "http-proxy"
+	proxySecret = "proxy-router-config"
 )
 
 func getProxyContainerArgs(config string) []string {
@@ -24,7 +25,7 @@ func getProxyContainerArgs(config string) []string {
 		config,
 	}
 }
-func newProxyDeployment(namespace, image string, replicas int32, config, routerHost string) *appsv1.Deployment {
+func newProxyDeployment(namespace, image string, replicas int32, config string) *appsv1.Deployment {
 	labels := map[string]string{
 		"name": proxyName,
 	}
@@ -44,16 +45,26 @@ func newProxyDeployment(namespace, image string, replicas int32, config, routerH
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: proxySecret,
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: proxySecret,
+								},
+							},
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:            "proxy",
 							Image:           image,
 							Args:            getProxyContainerArgs(config),
 							ImagePullPolicy: corev1.PullAlways,
-							Env: []corev1.EnvVar{
+							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:  "ICPROXY_BRIDGE_HOST",
-									Value: routerHost,
+									Name:      proxySecret,
+									MountPath: "/etc/messaging",
 								},
 							},
 						},
@@ -62,6 +73,26 @@ func newProxyDeployment(namespace, image string, replicas int32, config, routerH
 			},
 		},
 	}
+}
+
+func newProxySecret(namespace, routerHost string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxySecret,
+			Namespace: namespace,
+		},
+		StringData: map[string]string{
+			"connect.json": getRouterConfig(routerHost),
+		},
+	}
+}
+
+func getRouterConfig(routerHost string) string {
+	config := `{
+	"scheme": "amqp",
+	"host": "<ROUTER>"
+}`
+	return strings.Replace(config, "<ROUTER>", routerHost, 1)
 }
 
 func newProxyService(namespace string, msvcs []*ioclient.MicroserviceInfo) *corev1.Service {

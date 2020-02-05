@@ -312,11 +312,16 @@ func (mgr *Manager) updateProxy(msvcs []*ioclient.MicroserviceInfo) error {
 		if !k8serrors.IsNotFound(err) {
 			return err
 		}
-		// Create new deployment
-		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(msvcs), mgr.routerAddress)
-		mgr.setOwnerReference(dep)
-		if err := mgr.k8sClient.Create(context.TODO(), dep); err != nil {
-			return err
+		// Create new secret and deployment
+		secret := newProxySecret(mgr.namespace, mgr.routerAddress)
+		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(msvcs))
+		for _, obj := range []metav1.Object{secret, dep} {
+			mgr.setOwnerReference(obj)
+		}
+		for _, obj := range []runtime.Object{secret, dep} {
+			if err := mgr.k8sClient.Create(context.TODO(), obj); err != nil {
+				return err
+			}
 		}
 	}
 
