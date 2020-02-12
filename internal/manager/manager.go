@@ -147,7 +147,7 @@ func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
 		}
 		// Store microservices to cache (name, uuid, ports)
 		portMapping := ioclient.MicroservicePortMapping{
-			External: msvcPort,
+			Public: msvcPort,
 		}
 		// Update cache
 		if cachedMsvc, exists := mgr.msvcCache[msvcUUID]; exists {
@@ -236,7 +236,7 @@ func (mgr *Manager) cacheIsInvalid(msvc ioclient.MicroserviceInfo) bool {
 	// Build map to avoid O(N^2) time complexity where N is msvc port count
 	cachedPorts := buildPortMap(mgr.msvcCache[msvc.UUID].Ports)
 	for _, msvcPort := range msvc.Ports {
-		if _, exists := cachedPorts[msvcPort.External]; !exists {
+		if _, exists := cachedPorts[msvcPort.Public]; !exists {
 			// Make updates with K8s API Server
 			return true
 		}
@@ -353,9 +353,9 @@ func (mgr *Manager) updateProxyService(foundSvc *corev1.Service, msvcs []*ioclie
 		svcPorts := getServicePorts(msvc.Name, msvc.UUID, foundSvc.Spec.Ports)
 		// Add new ports that don't appear in service
 		for idx, msvcPort := range msvc.Ports {
-			if msvcPort.External != 0 {
-				if _, exists := svcPorts[msvcPort.External]; !exists {
-					svcPorts[msvcPort.External] = generateServicePort(msvc.Name, msvc.UUID, msvcPort.External, idx)
+			if msvcPort.Public != 0 {
+				if _, exists := svcPorts[msvcPort.Public]; !exists {
+					svcPorts[msvcPort.Public] = generateServicePort(msvc.Name, msvc.UUID, msvcPort.Public, idx)
 				}
 			}
 		}
@@ -410,13 +410,13 @@ func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment, msvcs []*
 
 		// Add new ports that don't appear in config
 		for _, msvcPort := range msvc.Ports {
-			if msvcPort.External != 0 {
-				if _, exists := configPorts[msvcPort.External]; !exists {
+			if msvcPort.Public != 0 {
+				if _, exists := configPorts[msvcPort.Public]; !exists {
 					separator := ","
 					if config == "" {
 						separator = ""
 					}
-					config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(msvc.Name, msvc.UUID, msvcPort.External))
+					config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(msvc.Name, msvc.UUID, msvcPort.Public))
 				}
 			}
 		}

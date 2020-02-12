@@ -64,6 +64,12 @@ github.com/eapache/go-resiliency v1.1.0/go.mod h1:kFI+JgMyC7bLPUVY133qvEBtVayf5m
 github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21/go.mod h1:+020luEh2TKB4/GOp8oxxtq0Daoen/Cii55CzbTV6DU=
 github.com/eapache/queue v1.1.0/go.mod h1:6eCeP0CKFpHLu8blIFXhExK/dRa7WDZfr6jVFPTqq+I=
 github.com/eclipse-iofog/iofog-go-sdk v0.0.0-20200112205444-b0cebcdf3134/go.mod h1:JtMRzY7mu4od6Nwzu0TITg20bsNnKW78OwSCI59fbu8=
+github.com/eclipse-iofog/iofog-go-sdk v0.0.0-20200203212542-9cd8e9bc29ff h1:76+h+GFkg1crPS3khNnIeopFhouCT3bF7Mp+9o0MLmE=
+github.com/eclipse-iofog/iofog-go-sdk v0.0.0-20200203212542-9cd8e9bc29ff/go.mod h1:JtMRzY7mu4od6Nwzu0TITg20bsNnKW78OwSCI59fbu8=
+github.com/eclipse-iofog/iofog-go-sdk v0.0.0-20200212215648-fb72f3f98cef h1:rA1vkML20BDkY6VRgfO26NJEbpamDhtKQuXosqjgbUk=
+github.com/eclipse-iofog/iofog-go-sdk v0.0.0-20200212215648-fb72f3f98cef/go.mod h1:JtMRzY7mu4od6Nwzu0TITg20bsNnKW78OwSCI59fbu8=
+github.com/eclipse-iofog/iofog-go-sdk v0.0.0-20200212232411-b634a348ca29 h1:THjE99NAcemOyHFSkrKuOqTgJ+sElrxVDWOMvdyehJs=
+github.com/eclipse-iofog/iofog-go-sdk v0.0.0-20200212232411-b634a348ca29/go.mod h1:JtMRzY7mu4od6Nwzu0TITg20bsNnKW78OwSCI59fbu8=
 github.com/eclipse-iofog/iofog-go-sdk v1.3.0 h1:6OD+WUw6bl/gDflGMID8xAvZDPGlKQcK/ONxTQa100k=
 github.com/eclipse-iofog/iofog-go-sdk v1.3.0/go.mod h1:X9xGwzS9ySY5iqY5hpEK6mtWBvwr5EH8377kq+ohSVY=
 github.com/elazarl/go-bindata-assetfs v1.0.0/go.mod h1:v+YaWX3bdea5J/mo8dSETolEo7R71Vk1u8bnjau5yw4=

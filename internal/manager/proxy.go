@@ -122,14 +122,14 @@ func createProxyConfig(msvcs []*ioclient.MicroserviceInfo) string {
 	config := ""
 	for msvcIdx, msvc := range msvcs {
 		for _, msvcPort := range msvc.Ports {
-			if msvcPort.External == 0 {
+			if msvcPort.Public == 0 {
 				continue
 			}
 			separator := ""
 			if msvcIdx != 0 {
 				separator = ","
 			}
-			config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(msvc.Name, msvc.UUID, msvcPort.External))
+			config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(msvc.Name, msvc.UUID, msvcPort.Public))
 		}
 	}
 	return config

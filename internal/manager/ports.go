@@ -12,7 +12,7 @@ import (
 
 func hasPublicPorts(msvc ioclient.MicroserviceInfo) bool {
 	for _, msvcPort := range msvc.Ports {
-		if msvcPort.External != 0 {
+		if msvcPort.Public != 0 {
 			return true
 		}
 	}
@@ -22,8 +22,8 @@ func hasPublicPorts(msvc ioclient.MicroserviceInfo) bool {
 func buildPortMap(ports []ioclient.MicroservicePortMapping) map[int]bool {
 	portMap := make(map[int]bool)
 	for _, port := range ports {
-		if port.External != 0 {
-			portMap[port.External] = true
+		if port.Public != 0 {
+			portMap[port.Public] = true
 		}
 	}
 	return portMap
@@ -32,10 +32,10 @@ func buildPortMap(ports []ioclient.MicroservicePortMapping) map[int]bool {
 func generateServicePorts(msvcName, msvcUUID string, msvcPorts []ioclient.MicroservicePortMapping) []corev1.ServicePort {
 	ports := make([]corev1.ServicePort, 0)
 	for idx, msvcPort := range msvcPorts {
-		if msvcPort.External == 0 {
+		if msvcPort.Public == 0 {
 			continue
 		}
-		ports = append(ports, generateServicePort(msvcName, msvcUUID, msvcPort.External, idx))
+		ports = append(ports, generateServicePort(msvcName, msvcUUID, msvcPort.Public, idx))
 	}
 	return ports
 }
