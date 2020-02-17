@@ -10,8 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	ioclient "github.com/eclipse-iofog/iofog-go-sdk/pkg/client"
 )
 
 const (
@@ -96,13 +94,13 @@ func getRouterConfig(routerHost string) string {
 	return strings.Replace(config, "<ROUTER>", routerHost, 1)
 }
 
-func newProxyService(namespace string, ports []ioclient.MicroservicePublicPort) *corev1.Service {
+func newProxyService(namespace string, ports portMap) *corev1.Service {
 	labels := map[string]string{
 		"name": proxyName,
 	}
 	svcPorts := make([]corev1.ServicePort, 0)
-	for _, port := range ports {
-		svcPorts = append(svcPorts, generateServicePort(port.PublicPort.Port, port.PublicPort.Queue))
+	for port, queue := range ports {
+		svcPorts = append(svcPorts, generateServicePort(port, queue))
 	}
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -119,14 +117,14 @@ func newProxyService(namespace string, ports []ioclient.MicroservicePublicPort) 
 	}
 }
 
-func createProxyConfig(ports []ioclient.MicroservicePublicPort) string {
+func createProxyConfig(ports portMap) string {
 	config := ""
-	for _, port := range ports {
+	for port, queue := range ports {
 		separator := ","
 		if config == "" {
 			separator = ""
 		}
-		config = fmt.Sprintf("%s%s", config, separator, createProxyString(port.PublicPort.Port, port.PublicPort.Queue))
+		config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(port, queue))
 	}
 	return config
 }

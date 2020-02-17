@@ -27,12 +27,14 @@ const (
 	pollInterval          = time.Second * 10
 )
 
+type portMap map[int]string // map[port]queue
+
 type Manager struct {
 	namespace      string
 	config         *rest.Config
 	iofogUserEmail string
 	iofogUserPass  string
-	cache          map[int]string // map[port]queue
+	cache          portMap
 	k8sClient      k8sclient.Client
 	log            logr.Logger
 	owner          metav1.OwnerReference
@@ -47,7 +49,7 @@ func New(namespace, iofogUserEmail, iofogUserPass, proxyImage, routerAddress str
 		config:         config,
 		iofogUserEmail: iofogUserEmail,
 		iofogUserPass:  iofogUserPass,
-		cache:          make(map[int]string),
+		cache:          make(portMap),
 		log:            logf.Log.WithName(managerName),
 		proxyImage:     proxyImage,
 		routerAddress:  routerAddress,
@@ -109,7 +111,8 @@ func (mgr *Manager) Run() (err error) {
 	for {
 		time.Sleep(pollInterval)
 		if err := mgr.run(ioClient); err != nil {
-			mgr.log.Error(err, "Run loop failed")
+			// Exit with error to reset the cache
+			return err
 		}
 	}
 }
@@ -148,17 +151,17 @@ func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
 		// Update cache
 		mgr.cache[port] = queue
 	}
+
+	fmt.Println(mgr.cache)
 	return nil
 }
 
 func (mgr *Manager) run(ioClient *ioclient.Client) error {
-	mgr.log.Info("Polling Controller API")
 	// Check ports
 	backendPorts, err := ioClient.GetAllMicroservicePublicPorts()
 	if err != nil {
 		return err
 	}
-	mgr.log.Info(fmt.Sprintf("Found %d backend Ports", len(backendPorts)))
 
 	// Update Proxy config if new ports are created or queues changed
 	for _, backendPort := range backendPorts {
@@ -172,13 +175,14 @@ func (mgr *Manager) run(ioClient *ioclient.Client) error {
 				// Update cache
 				mgr.cache[port] = queue
 				// Update K8s resources
-				return mgr.updateProxy(backendPorts)
+				return mgr.updateProxy()
 			}
 			// Exists and queue is unchanged
 			continue
 		} else {
-			// Microservice not stored in cache
-			return mgr.updateProxy(backendPorts)
+			// New port, update cache
+			mgr.cache[port] = queue
+			return mgr.updateProxy()
 		}
 	}
 
@@ -197,11 +201,10 @@ func (mgr *Manager) run(ioClient *ioclient.Client) error {
 		// Remove microservice from cache
 		delete(mgr.cache, port)
 		// Delete resources from K8s API Server
-		return mgr.updateProxy(backendPorts)
+		return mgr.updateProxy()
 	}
 
 	// Cache is valid
-	mgr.log.Info("Cache valid")
 	return nil
 }
 
@@ -240,12 +243,9 @@ func (mgr *Manager) deleteProxyService() error {
 }
 
 // Create or update an HTTP Proxy instance for a Microservice
-func (mgr *Manager) updateProxy(ports []ioclient.MicroservicePublicPort) error {
-	mgr.log.Info("Cache invalid")
-
-	if len(ports) == 0 {
-		return nil
-	}
+func (mgr *Manager) updateProxy() error {
+	fmt.Println("Cache reconciled:")
+	fmt.Println(mgr.cache)
 
 	// Key to check resources don't already exist
 	proxyKey := k8sclient.ObjectKey{
@@ -257,7 +257,7 @@ func (mgr *Manager) updateProxy(ports []ioclient.MicroservicePublicPort) error {
 	foundDep := appsv1.Deployment{}
 	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, &foundDep); err == nil {
 		// Existing deployment found, update the proxy configuration
-		if err := mgr.updateProxyDeployment(&foundDep, ports); err != nil {
+		if err := mgr.updateProxyDeployment(&foundDep); err != nil {
 			return err
 		}
 	} else {
@@ -266,7 +266,7 @@ func (mgr *Manager) updateProxy(ports []ioclient.MicroservicePublicPort) error {
 		}
 		// Create new secret and deployment
 		secret := newProxySecret(mgr.namespace, mgr.routerAddress)
-		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(ports))
+		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(mgr.cache))
 		for _, obj := range []metav1.Object{secret, dep} {
 			mgr.setOwnerReference(obj)
 		}
@@ -281,7 +281,7 @@ func (mgr *Manager) updateProxy(ports []ioclient.MicroservicePublicPort) error {
 	foundSvc := corev1.Service{}
 	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, &foundSvc); err == nil {
 		// Existing service found, update it without touching immutable values
-		if err := mgr.updateProxyService(&foundSvc, ports); err != nil {
+		if err := mgr.updateProxyService(&foundSvc); err != nil {
 			return err
 		}
 	} else {
@@ -289,7 +289,7 @@ func (mgr *Manager) updateProxy(ports []ioclient.MicroservicePublicPort) error {
 			return err
 		}
 		// Create new service
-		svc := newProxyService(mgr.namespace, ports)
+		svc := newProxyService(mgr.namespace, mgr.cache)
 		mgr.setOwnerReference(svc)
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
@@ -299,10 +299,10 @@ func (mgr *Manager) updateProxy(ports []ioclient.MicroservicePublicPort) error {
 	return nil
 }
 
-func (mgr *Manager) updateProxyService(foundSvc *corev1.Service, ports []ioclient.MicroservicePublicPort) error {
+func (mgr *Manager) updateProxyService(foundSvc *corev1.Service) error {
 	foundSvc.Spec.Ports = make([]corev1.ServicePort, 0)
-	for _, port := range ports {
-		foundSvc.Spec.Ports = append(foundSvc.Spec.Ports, generateServicePort(port.PublicPort.Port, port.PublicPort.Queue))
+	for port, queue := range mgr.cache {
+		foundSvc.Spec.Ports = append(foundSvc.Spec.Ports, generateServicePort(port, queue))
 	}
 
 	// Cannot update service to have 0 ports, delete it
@@ -320,9 +320,9 @@ func (mgr *Manager) updateProxyService(foundSvc *corev1.Service, ports []ioclien
 }
 
 // TODO: Replace this function with logic to update config in Proxy without editing the deployment
-func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment, ports []ioclient.MicroservicePublicPort) error {
+func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment) error {
 	// Generate config
-	config := createProxyConfig(ports)
+	config := createProxyConfig(mgr.cache)
 
 	if len(config) == 0 {
 		// Delete unneeded resource
