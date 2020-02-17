@@ -157,6 +157,8 @@ func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
 }
 
 func (mgr *Manager) run(ioClient *ioclient.Client) error {
+	cacheReconciled := false
+
 	// Check ports
 	backendPorts, err := ioClient.GetAllMicroservicePublicPorts()
 	if err != nil {
@@ -172,17 +174,14 @@ func (mgr *Manager) run(ioClient *ioclient.Client) error {
 		if exists {
 			// Check for queue change
 			if existingQueue != queue {
+				cacheReconciled = true
 				// Update cache
 				mgr.cache[port] = queue
-				// Update K8s resources
-				return mgr.updateProxy()
 			}
-			// Exists and queue is unchanged
-			continue
 		} else {
 			// New port, update cache
+			cacheReconciled = true
 			mgr.cache[port] = queue
-			return mgr.updateProxy()
 		}
 	}
 
@@ -193,33 +192,46 @@ func (mgr *Manager) run(ioClient *ioclient.Client) error {
 		backendPortMap[backendPort.PublicPort.Port] = backendPort.PublicPort.Queue
 	}
 	for port := range mgr.cache {
-		// If match, continue
-		if _, exists := backendPortMap[port]; exists {
-			continue
+		// Cached port does not exist in backend, delete it
+		if _, exists := backendPortMap[port]; !exists {
+			// Cached microservice not found in backend
+			cacheReconciled = true
+			// Remove microservice from cache
+			delete(mgr.cache, port)
 		}
-		// Cached microservice not found in backend
-		// Remove microservice from cache
-		delete(mgr.cache, port)
-		// Delete resources from K8s API Server
+	}
+
+	// Update K8s resources
+	if cacheReconciled {
+		fmt.Println("Cache reconciled:")
+		fmt.Println(mgr.cache)
 		return mgr.updateProxy()
 	}
 
-	// Cache is valid
 	return nil
 }
 
 // Delete K8s resources for an HTTP Proxy created for a Microservice
 func (mgr *Manager) deleteProxyDeployment() error {
-	proxyKey := k8sclient.ObjectKey{
+	// Dep
+	key := k8sclient.ObjectKey{
 		Name:      proxyName,
 		Namespace: mgr.namespace,
 	}
-	meta := metav1.ObjectMeta{
+	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
 		Name:      proxyName,
 		Namespace: mgr.namespace,
+	}}
+	if err := mgr.delete(key, dep); err != nil {
+		return err
 	}
-	dep := &appsv1.Deployment{ObjectMeta: meta}
-	if err := mgr.delete(proxyKey, dep); err != nil {
+	// Secret
+	key.Name = proxySecret
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		Name:      proxyName,
+		Namespace: mgr.namespace,
+	}}
+	if err := mgr.delete(key, secret); err != nil {
 		return err
 	}
 	return nil
@@ -244,9 +256,6 @@ func (mgr *Manager) deleteProxyService() error {
 
 // Create or update an HTTP Proxy instance for a Microservice
 func (mgr *Manager) updateProxy() error {
-	fmt.Println("Cache reconciled:")
-	fmt.Println(mgr.cache)
-
 	// Key to check resources don't already exist
 	proxyKey := k8sclient.ObjectKey{
 		Name:      proxyName,
