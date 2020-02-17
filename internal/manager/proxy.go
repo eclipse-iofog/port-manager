@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	ioclient "github.com/eclipse-iofog/iofog-go-sdk/pkg/client"
 )
@@ -95,13 +96,13 @@ func getRouterConfig(routerHost string) string {
 	return strings.Replace(config, "<ROUTER>", routerHost, 1)
 }
 
-func newProxyService(namespace string, msvcs []*ioclient.MicroserviceInfo) *corev1.Service {
+func newProxyService(namespace string, ports []ioclient.MicroservicePublicPort) *corev1.Service {
 	labels := map[string]string{
 		"name": proxyName,
 	}
-	ports := make([]corev1.ServicePort, 0)
-	for _, msvc := range msvcs {
-		ports = append(ports, generateServicePorts(msvc.Name, msvc.UUID, msvc.Ports)...)
+	svcPorts := make([]corev1.ServicePort, 0)
+	for _, port := range ports {
+		svcPorts = append(svcPorts, generateServicePort(port.PublicPort.Port, port.PublicPort.Queue))
 	}
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -113,24 +114,19 @@ func newProxyService(namespace string, msvcs []*ioclient.MicroserviceInfo) *core
 			Type:                  corev1.ServiceTypeLoadBalancer,
 			ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyTypeLocal,
 			Selector:              labels,
-			Ports:                 ports,
+			Ports:                 svcPorts,
 		},
 	}
 }
 
-func createProxyConfig(msvcs []*ioclient.MicroserviceInfo) string {
+func createProxyConfig(ports []ioclient.MicroservicePublicPort) string {
 	config := ""
-	for msvcIdx, msvc := range msvcs {
-		for _, msvcPort := range msvc.Ports {
-			if msvcPort.Public == 0 {
-				continue
-			}
-			separator := ""
-			if msvcIdx != 0 {
-				separator = ","
-			}
-			config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(msvc.Name, msvc.UUID, msvcPort.Public))
+	for _, port := range ports {
+		separator := ","
+		if config == "" {
+			separator = ""
 		}
+		config = fmt.Sprintf("%s%s", config, separator, createProxyString(port.PublicPort.Port, port.PublicPort.Queue))
 	}
 	return config
 }
@@ -143,8 +139,8 @@ func updateProxyConfig(dep *appsv1.Deployment, config string) error {
 	return nil
 }
 
-func createProxyString(msvcName, msvcUUID string, msvcPort int) string {
-	return fmt.Sprintf("http:%d=>amqp:%s-%s", msvcPort, msvcName, msvcUUID)
+func createProxyString(port int, queue string) string {
+	return fmt.Sprintf("http:%d=>amqp:%s", port, queue)
 }
 
 func getProxyConfig(dep *appsv1.Deployment) (string, error) {
@@ -185,37 +181,26 @@ func decodeAllPorts(config string) (ports map[int]bool, err error) {
 	return decodeConfig(config, "http:", "=>")
 }
 
-func decodePorts(config, msvcName, msvcUUID string) (ports map[int]bool, err error) {
-	return decodeConfig(config, "http:", fmt.Sprintf("=>amqp:%s-%s", msvcName, msvcUUID))
-}
-
-func decodeMicroservice(configItem string) (msvcPort int, msvcName, msvcUUID string, err error) {
-	// http:{msvcPort}=>amqp:{msvcName-msvcUUID}
+func decodeMicroservice(configItem string) (port int, queue string, err error) {
+	// http:{msvcPort}=>amqp:{queueName}
 	// Port
 	ports := between(configItem, "http:", "=>")
 	if len(ports) != 1 {
 		err = errors.New("Could not get port from config item " + configItem)
 		return
 	}
-	msvcPort, err = strconv.Atoi(ports[0])
+	port, err = strconv.Atoi(ports[0])
 	if err != nil {
 		err = errors.New("Failed to convert port string to int: " + ports[0])
 		return
 	}
-	// Name and UUID
+	// Queue name
 	ids := strings.SplitAfter(configItem, "=>amqp:")
 	if len(ids) != 2 {
 		err = errors.New("Could not split after =>amqp: in config item " + configItem)
 		return
 	}
-	id := ids[1]
-	separatorIdx := strings.LastIndex(id, "-")
-	if separatorIdx == -1 || separatorIdx >= len(id)-1 {
-		err = errors.New("Could not find last index of - char in config item " + configItem)
-		return
-	}
-	msvcName = id[:separatorIdx]
-	msvcUUID = id[separatorIdx+1:]
+	queue = ids[1]
 	return
 }
 
@@ -240,4 +225,13 @@ func between(value string, a string, b string) (substrs []string) {
 		value = value[posLast+1:]
 	}
 	return
+}
+
+func generateServicePort(port int, queue string) corev1.ServicePort {
+	return corev1.ServicePort{
+		Name:       strings.ToLower(queue),
+		Port:       int32(port),
+		TargetPort: intstr.FromInt(port),
+		Protocol:   corev1.Protocol("TCP"),
+	}
 }

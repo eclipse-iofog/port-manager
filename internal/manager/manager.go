@@ -32,7 +32,7 @@ type Manager struct {
 	config         *rest.Config
 	iofogUserEmail string
 	iofogUserPass  string
-	msvcCache      map[string]*ioclient.MicroserviceInfo
+	cache          map[int]string // map[port]queue
 	k8sClient      k8sclient.Client
 	log            logr.Logger
 	owner          metav1.OwnerReference
@@ -47,7 +47,7 @@ func New(namespace, iofogUserEmail, iofogUserPass, proxyImage, routerAddress str
 		config:         config,
 		iofogUserEmail: iofogUserEmail,
 		iofogUserPass:  iofogUserPass,
-		msvcCache:      make(map[string]*ioclient.MicroserviceInfo),
+		cache:          make(map[int]string),
 		log:            logf.Log.WithName(managerName),
 		proxyImage:     proxyImage,
 		routerAddress:  routerAddress,
@@ -141,26 +141,12 @@ func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
 	configItems := strings.Split(config, ",")
 	for _, configItem := range configItems {
 		// Get microservice and port details from item
-		msvcPort, msvcName, msvcUUID, err := decodeMicroservice(configItem)
+		port, queue, err := decodeMicroservice(configItem)
 		if err != nil {
 			return err
 		}
-		// Store microservices to cache (name, uuid, ports)
-		portMapping := ioclient.MicroservicePortMapping{
-			Public: msvcPort,
-		}
 		// Update cache
-		if cachedMsvc, exists := mgr.msvcCache[msvcUUID]; exists {
-			cachedMsvc.Ports = append(cachedMsvc.Ports, portMapping)
-		} else {
-			mgr.msvcCache[msvcUUID] = &ioclient.MicroserviceInfo{
-				UUID: msvcUUID,
-				Name: msvcName,
-				Ports: []ioclient.MicroservicePortMapping{
-					portMapping,
-				},
-			}
-		}
+		mgr.cache[port] = queue
 	}
 	return nil
 }
@@ -168,91 +154,55 @@ func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
 func (mgr *Manager) run(ioClient *ioclient.Client) error {
 	mgr.log.Info("Polling Controller API")
 	// Check ports
-	msvcs, err := ioClient.GetAllMicroservices()
+	backendPorts, err := ioClient.GetAllMicroservicePublicPorts()
 	if err != nil {
 		return err
 	}
-	mgr.log.Info(fmt.Sprintf("Found %d Microservices", len(msvcs.Microservices)))
+	mgr.log.Info(fmt.Sprintf("Found %d backend Ports", len(backendPorts)))
 
-	changedMsvcs := make([]*ioclient.MicroserviceInfo, 0)
-	// Create/update resources based on microservice port state
-	for _, msvc := range msvcs.Microservices {
-		_, exists := mgr.msvcCache[msvc.UUID]
+	// Update Proxy config if new ports are created or queues changed
+	for _, backendPort := range backendPorts {
+		port := backendPort.PublicPort.Port
+		queue := backendPort.PublicPort.Queue
+		existingQueue, exists := mgr.cache[port]
+		// Microservice already stored in cache
 		if exists {
-			// Microservice already stored in cache
-			if mgr.cacheIsInvalid(msvc) {
-				changedMsvcs = append(changedMsvcs, &msvc)
+			// Check for queue change
+			if existingQueue != queue {
+				// Update cache
+				mgr.cache[port] = queue
+				// Update K8s resources
+				return mgr.updateProxy(backendPorts)
 			}
+			// Exists and queue is unchanged
+			continue
 		} else {
 			// Microservice not stored in cache
-			if hasPublicPorts(msvc) {
-				mgr.log.Info("Found Microservice that is not cached", "Microservice", msvc.Name)
-				changedMsvcs = append(changedMsvcs, &msvc)
-			}
+			return mgr.updateProxy(backendPorts)
 		}
 	}
 
-	// Delete resources for erased microservices
-	// Build map to avoid O(N^2) time complexity where N is msvc count
-	backendMsvcs := make(map[string]*ioclient.MicroserviceInfo)
-	for _, msvc := range msvcs.Microservices {
-		backendMsvcs[msvc.UUID] = &msvc
+	// Update Proxy config if ports are deleted
+	// Create map of backend ports
+	backendPortMap := make(map[int]string)
+	for _, backendPort := range backendPorts {
+		backendPortMap[backendPort.PublicPort.Port] = backendPort.PublicPort.Queue
 	}
-	// Compare cache to backend
-	for _, cachedMsvc := range mgr.msvcCache {
+	for port := range mgr.cache {
 		// If match, continue
-		if _, exists := backendMsvcs[cachedMsvc.UUID]; exists {
+		if _, exists := backendPortMap[port]; exists {
 			continue
 		}
-		mgr.log.Info("Deleting Microservice from cache", "Microservice", cachedMsvc.Name)
 		// Cached microservice not found in backend
-		// Delete resources from K8s API Server
-		cachedMsvc.Ports = make([]ioclient.MicroservicePortMapping, 0)
-		changedMsvcs = append(changedMsvcs, cachedMsvc)
 		// Remove microservice from cache
-		delete(mgr.msvcCache, cachedMsvc.UUID)
+		delete(mgr.cache, port)
+		// Delete resources from K8s API Server
+		return mgr.updateProxy(backendPorts)
 	}
 
-	if err = mgr.updateProxy(changedMsvcs); err != nil {
-		return err
-	}
-
-	// Update cache
-	for _, changedMsvc := range changedMsvcs {
-		if len(changedMsvc.Ports) == 0 {
-			delete(mgr.msvcCache, changedMsvc.UUID)
-		} else {
-			mgr.msvcCache[changedMsvc.UUID] = changedMsvc
-		}
-	}
-
+	// Cache is valid
+	mgr.log.Info("Cache valid")
 	return nil
-}
-
-// Update K8s resources for a Microservice found in this runtime's cache
-func (mgr *Manager) cacheIsInvalid(msvc ioclient.MicroserviceInfo) bool {
-	mgr.log.Info("Handling cached Microservice", "Microservice", msvc.Name)
-	// Find any newly added ports
-	// Build map to avoid O(N^2) time complexity where N is msvc port count
-	cachedPorts := buildPortMap(mgr.msvcCache[msvc.UUID].Ports)
-	for _, msvcPort := range msvc.Ports {
-		if _, exists := cachedPorts[msvcPort.Public]; !exists {
-			// Make updates with K8s API Server
-			return true
-		}
-	}
-	// Find any removed ports
-	// Build map to avoid O(N^2) time complexity where N is msvc port count
-	backendPorts := buildPortMap(msvc.Ports)
-	for cachedPort := range cachedPorts {
-		if _, exists := backendPorts[cachedPort]; !exists {
-			// Did not find cached port in backend, delete cached port
-			// Make updates with K8s API Server
-			return true
-		}
-	}
-
-	return false
 }
 
 // Delete K8s resources for an HTTP Proxy created for a Microservice
@@ -290,8 +240,10 @@ func (mgr *Manager) deleteProxyService() error {
 }
 
 // Create or update an HTTP Proxy instance for a Microservice
-func (mgr *Manager) updateProxy(msvcs []*ioclient.MicroserviceInfo) error {
-	if len(msvcs) == 0 {
+func (mgr *Manager) updateProxy(ports []ioclient.MicroservicePublicPort) error {
+	mgr.log.Info("Cache invalid")
+
+	if len(ports) == 0 {
 		return nil
 	}
 
@@ -305,7 +257,7 @@ func (mgr *Manager) updateProxy(msvcs []*ioclient.MicroserviceInfo) error {
 	foundDep := appsv1.Deployment{}
 	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, &foundDep); err == nil {
 		// Existing deployment found, update the proxy configuration
-		if err := mgr.updateProxyDeployment(&foundDep, msvcs); err != nil {
+		if err := mgr.updateProxyDeployment(&foundDep, ports); err != nil {
 			return err
 		}
 	} else {
@@ -314,7 +266,7 @@ func (mgr *Manager) updateProxy(msvcs []*ioclient.MicroserviceInfo) error {
 		}
 		// Create new secret and deployment
 		secret := newProxySecret(mgr.namespace, mgr.routerAddress)
-		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(msvcs))
+		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(ports))
 		for _, obj := range []metav1.Object{secret, dep} {
 			mgr.setOwnerReference(obj)
 		}
@@ -329,7 +281,7 @@ func (mgr *Manager) updateProxy(msvcs []*ioclient.MicroserviceInfo) error {
 	foundSvc := corev1.Service{}
 	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, &foundSvc); err == nil {
 		// Existing service found, update it without touching immutable values
-		if err := mgr.updateProxyService(&foundSvc, msvcs); err != nil {
+		if err := mgr.updateProxyService(&foundSvc, ports); err != nil {
 			return err
 		}
 	} else {
@@ -337,7 +289,7 @@ func (mgr *Manager) updateProxy(msvcs []*ioclient.MicroserviceInfo) error {
 			return err
 		}
 		// Create new service
-		svc := newProxyService(mgr.namespace, msvcs)
+		svc := newProxyService(mgr.namespace, ports)
 		mgr.setOwnerReference(svc)
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
@@ -347,36 +299,10 @@ func (mgr *Manager) updateProxy(msvcs []*ioclient.MicroserviceInfo) error {
 	return nil
 }
 
-func (mgr *Manager) updateProxyService(foundSvc *corev1.Service, msvcs []*ioclient.MicroserviceInfo) error {
-	for _, msvc := range msvcs {
-		// Get service ports pertaining to this microservice
-		svcPorts := getServicePorts(msvc.Name, msvc.UUID, foundSvc.Spec.Ports)
-		// Add new ports that don't appear in service
-		for idx, msvcPort := range msvc.Ports {
-			if msvcPort.Public != 0 {
-				if _, exists := svcPorts[msvcPort.Public]; !exists {
-					svcPorts[msvcPort.Public] = generateServicePort(msvc.Name, msvc.UUID, msvcPort.Public, idx)
-				}
-			}
-		}
-		// Remove old ports that appear in service
-		msvcPorts := buildPortMap(msvc.Ports)
-		for _, svcPort := range svcPorts {
-			if _, exists := msvcPorts[int(svcPort.Port)]; !exists {
-				delete(svcPorts, int(svcPort.Port))
-			}
-		}
-
-		// Remove existing ports
-		for idx, svcPort := range foundSvc.Spec.Ports {
-			if strings.Contains(svcPort.Name, generateServicePortPrefix(msvc.Name, msvc.UUID)) {
-				foundSvc.Spec.Ports = append(foundSvc.Spec.Ports[0:idx], foundSvc.Spec.Ports[idx+1:]...)
-			}
-		}
-		// Save the new ports
-		for _, svcPort := range svcPorts {
-			foundSvc.Spec.Ports = append(foundSvc.Spec.Ports, svcPort)
-		}
+func (mgr *Manager) updateProxyService(foundSvc *corev1.Service, ports []ioclient.MicroservicePublicPort) error {
+	foundSvc.Spec.Ports = make([]corev1.ServicePort, 0)
+	for _, port := range ports {
+		foundSvc.Spec.Ports = append(foundSvc.Spec.Ports, generateServicePort(port.PublicPort.Port, port.PublicPort.Queue))
 	}
 
 	// Cannot update service to have 0 ports, delete it
@@ -394,56 +320,13 @@ func (mgr *Manager) updateProxyService(foundSvc *corev1.Service, msvcs []*ioclie
 }
 
 // TODO: Replace this function with logic to update config in Proxy without editing the deployment
-func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment, msvcs []*ioclient.MicroserviceInfo) error {
-	config, err := getProxyConfig(foundDep)
-	if err != nil {
-		return err
-	}
-	// Record config to check for changes later
-	existingConfig := config
+func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment, ports []ioclient.MicroservicePublicPort) error {
+	// Generate config
+	config := createProxyConfig(ports)
 
-	for _, msvc := range msvcs {
-		configPorts, err := decodePorts(config, msvc.Name, msvc.UUID)
-		if err != nil {
-			return err
-		}
-
-		// Add new ports that don't appear in config
-		for _, msvcPort := range msvc.Ports {
-			if msvcPort.Public != 0 {
-				if _, exists := configPorts[msvcPort.Public]; !exists {
-					separator := ","
-					if config == "" {
-						separator = ""
-					}
-					config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(msvc.Name, msvc.UUID, msvcPort.Public))
-				}
-			}
-		}
-
-		// Remove old ports that appear in config
-		msvcPorts := buildPortMap(msvc.Ports)
-		for configPort := range configPorts {
-			if _, exists := msvcPorts[configPort]; !exists {
-				rmvSubstr := createProxyString(msvc.Name, msvc.UUID, configPort)
-				config = strings.Replace(config, ","+rmvSubstr, "", 1)
-				config = strings.Replace(config, rmvSubstr, "", 1)
-			}
-		}
-	}
 	if len(config) == 0 {
 		// Delete unneeded resource
 		return mgr.deleteProxyDeployment()
-	}
-
-	// Remove leading comma
-	if config[0] == ',' {
-		config = config[1:]
-	}
-
-	// No changes to config, don't update
-	if config == existingConfig {
-		return nil
 	}
 
 	// Save the config to deployment

@@ -129,11 +129,12 @@ type CatalogListResponse struct {
 // Microservices
 
 type MicroservicePortMapping struct {
-	Internal int    `json:"internal"`
-	External int    `json:"external"`
-	Public   int    `json:"publicPort,omitempty"`
-	Host     string `json:"host,omitempty"`
-	Protocol string `json:"protocol,omitempty"`
+	Internal   int    `json:"internal"`
+	External   int    `json:"external"`
+	Public     int    `json:"publicPort,omitempty"`
+	Host       string `json:"host,omitempty"`
+	Protocol   string `json:"protocol,omitempty"`
+	PublicLink string `json:"publicLink,omitempty"`
 }
 
 type MicroserviceVolumeMapping struct {
@@ -226,6 +227,17 @@ type MicroserviceListResponse struct {
 
 type MicroservicePortMappingListResponse struct {
 	PortMappings []MicroservicePortMapping `json:"ports"`
+}
+
+type MicroservicePublicPort struct {
+	MicroserviceUUID string     `json:"microserviceUuid"`
+	PublicPort       PublicPort `json:"publicPort"`
+}
+
+type PublicPort struct {
+	Protocol  string `json:"protocol"`
+	Queue     string `json:"queueName"`
+	Port      int    `json:"publicPort"`
 }
 
 // Users
