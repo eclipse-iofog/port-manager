@@ -228,7 +228,7 @@ func (mgr *Manager) deleteProxyDeployment() error {
 	// Secret
 	key.Name = proxySecret
 	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-		Name:      proxyName,
+		Name:      proxySecret,
 		Namespace: mgr.namespace,
 	}}
 	if err := mgr.delete(key, secret); err != nil {
