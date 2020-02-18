@@ -225,15 +225,6 @@ func (mgr *Manager) deleteProxyDeployment() error {
 	if err := mgr.delete(key, dep); err != nil {
 		return err
 	}
-	// Secret
-	key.Name = proxySecret
-	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-		Name:      proxySecret,
-		Namespace: mgr.namespace,
-	}}
-	if err := mgr.delete(key, secret); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -273,16 +264,11 @@ func (mgr *Manager) updateProxy() error {
 		if !k8serrors.IsNotFound(err) {
 			return err
 		}
-		// Create new secret and deployment
-		secret := newProxySecret(mgr.namespace, mgr.routerAddress)
-		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(mgr.cache))
-		for _, obj := range []metav1.Object{secret, dep} {
-			mgr.setOwnerReference(obj)
-		}
-		for _, obj := range []runtime.Object{secret, dep} {
-			if err := mgr.k8sClient.Create(context.TODO(), obj); err != nil {
-				return err
-			}
+		// Create new deployment
+		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(mgr.cache), mgr.routerAddress)
+		mgr.setOwnerReference(dep)
+		if err := mgr.k8sClient.Create(context.TODO(), dep); err != nil {
+			return err
 		}
 	}
 

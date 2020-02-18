@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	proxyName   = "http-proxy"
-	proxySecret = "proxy-router-config"
+	proxyName = "http-proxy"
 )
 
 func getProxyContainerArgs(config string) []string {
@@ -24,7 +23,7 @@ func getProxyContainerArgs(config string) []string {
 		config,
 	}
 }
-func newProxyDeployment(namespace, image string, replicas int32, config string) *appsv1.Deployment {
+func newProxyDeployment(namespace, image string, replicas int32, config, routerHost string) *appsv1.Deployment {
 	labels := map[string]string{
 		"name": proxyName,
 	}
@@ -44,44 +43,22 @@ func newProxyDeployment(namespace, image string, replicas int32, config string) 
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					Volumes: []corev1.Volume{
-						{
-							Name: proxySecret,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: proxySecret,
-								},
-							},
-						},
-					},
 					Containers: []corev1.Container{
 						{
 							Name:            "proxy",
 							Image:           image,
 							Args:            getProxyContainerArgs(config),
 							ImagePullPolicy: corev1.PullAlways,
-							VolumeMounts: []corev1.VolumeMount{
+							Env: []corev1.EnvVar{
 								{
-									Name:      proxySecret,
-									MountPath: "/etc/messaging",
+									Name:  "ICPROXY_BRIDGE_HOST",
+									Value: routerHost,
 								},
 							},
 						},
 					},
 				},
 			},
-		},
-	}
-}
-
-func newProxySecret(namespace, routerHost string) *corev1.Secret {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      proxySecret,
-			Namespace: namespace,
-		},
-		StringData: map[string]string{
-			"connect.json": getRouterConfig(routerHost),
 		},
 	}
 }
