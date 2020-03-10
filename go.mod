@@ -3,7 +3,7 @@ module github.com/eclipse-iofog/port-manager
 go 1.12
 
 require (
-	github.com/eclipse-iofog/iofog-go-sdk v0.0.0-20200309230602-7130b955c1b5
+	github.com/eclipse-iofog/iofog-go-sdk v0.0.0-20200310003733-ed7887c5b0d8
 	github.com/go-logr/logr v0.1.0
 	github.com/operator-framework/operator-sdk v0.10.0
 	k8s.io/api v0.17.3
