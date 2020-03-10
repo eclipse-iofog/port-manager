@@ -15,6 +15,7 @@ import (
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	ioclient "github.com/eclipse-iofog/iofog-go-sdk/pkg/client"
+	waitclient "github.com/eclipse-iofog/iofog-go-sdk/pkg/k8s"
 
 	"github.com/go-logr/logr"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -36,6 +37,8 @@ type Manager struct {
 	iofogUserPass  string
 	cache          portMap
 	k8sClient      k8sclient.Client
+	waitClient     *waitclient.Client
+	ioClient       *ioclient.Client
 	log            logr.Logger
 	owner          metav1.OwnerReference
 	proxyImage     string
@@ -82,9 +85,11 @@ func (mgr *Manager) getOwnerReference() error {
 // Make updates to K8s resources as required
 func (mgr *Manager) Run() (err error) {
 	// Instantiate Kubernetes client
-	mgr.k8sClient, err = k8sclient.New(mgr.config, k8sclient.Options{})
-	if err != nil {
-		return err
+	if mgr.k8sClient, err = k8sclient.New(mgr.config, k8sclient.Options{}); err != nil {
+		return
+	}
+	if mgr.waitClient, err = waitclient.NewInCluster(); err != nil {
+		return
 	}
 	mgr.log.Info("Created Kubernetes clients")
 
@@ -96,28 +101,27 @@ func (mgr *Manager) Run() (err error) {
 
 	// Instantiate ioFog client
 	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.namespace, controllerPort)
-	ioClient, err := ioclient.NewAndLogin(controllerEndpoint, mgr.iofogUserEmail, mgr.iofogUserPass)
-	if err != nil {
+	if mgr.ioClient, err = ioclient.NewAndLogin(ioclient.Options{Endpoint: controllerEndpoint}, mgr.iofogUserEmail, mgr.iofogUserPass); err != nil {
 		return err
 	}
 	mgr.log.Info("Logged into Controller API")
 
 	// Initialize cache based on K8s API
-	if err := mgr.generateCache(ioClient); err != nil {
+	if err := mgr.generateCache(); err != nil {
 		return err
 	}
 
 	// Watch Controller API
 	for {
 		time.Sleep(pollInterval)
-		if err := mgr.run(ioClient); err != nil {
+		if err := mgr.run(); err != nil {
 			// Exit with error to reset the cache
 			return err
 		}
 	}
 }
 
-func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
+func (mgr *Manager) generateCache() error {
 	mgr.log.Info("Generating cache based on Kubernetes API")
 
 	// Get deployment
@@ -131,6 +135,7 @@ func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
 			return err
 		}
 		// Deployment not found, no ports open, nothing to cache
+		fmt.Println(mgr.cache)
 		return nil
 	}
 
@@ -156,11 +161,11 @@ func (mgr *Manager) generateCache(ioClient *ioclient.Client) error {
 	return nil
 }
 
-func (mgr *Manager) run(ioClient *ioclient.Client) error {
+func (mgr *Manager) run() error {
 	cacheReconciled := false
 
 	// Check ports
-	backendPorts, err := ioClient.GetAllMicroservicePublicPorts()
+	backendPorts, err := mgr.ioClient.GetAllMicroservicePublicPorts()
 	if err != nil {
 		return err
 	}
@@ -287,6 +292,14 @@ func (mgr *Manager) updateProxy() error {
 		svc := newProxyService(mgr.namespace, mgr.cache)
 		mgr.setOwnerReference(svc)
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
+			return err
+		}
+		// Give Controller service IP
+		ip, err := mgr.waitClient.WaitForLoadBalancer(svc.Namespace, svc.Name, 120)
+		if err != nil {
+			return err
+		}
+		if err := mgr.ioClient.PutDefaultProxy(ip); err != nil {
 			return err
 		}
 	}

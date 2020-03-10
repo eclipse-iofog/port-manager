@@ -122,7 +122,7 @@ func getProxyConfig(dep *appsv1.Deployment) (string, error) {
 	if err := checkProxyDeployment(dep); err != nil {
 		return "", err
 	}
-	return dep.Spec.Template.Spec.Containers[0].Args[1], nil
+	return dep.Spec.Template.Spec.Containers[0].Args[len(getProxyContainerArgs(""))-1], nil
 }
 
 func checkProxyDeployment(dep *appsv1.Deployment) error {

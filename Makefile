@@ -18,6 +18,12 @@ GOLANG_VERSION = 1.12
 
 GOFILES_NOVENDOR = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
+MAJOR ?= $(shell cat version | grep MAJOR | sed 's/MAJOR=//g')
+MINOR ?= $(shell cat version | grep MINOR | sed 's/MINOR=//g')
+PATCH ?= $(shell cat version | grep PATCH | sed 's/PATCH=//g')
+SUFFIX ?= $(shell cat version | grep SUFFIX | sed 's/SUFFIX=//g')
+VERSION = $(MAJOR).$(MINOR).$(PATCH)$(SUFFIX)
+MODULES_VERSION = $(shell [ $(SUFFIX) == "-dev" ] && echo develop || echo $(VERSION))
 
 .PHONY: clean
 clean: ## Clean the working area and the project
@@ -38,6 +44,15 @@ fmt:
 .PHONY: test
 test:
 	set -o pipefail; go list -mod=vendor ./... | xargs -n1 go test -mod=vendor $(GOARGS) -v -parallel 1 2>&1 | tee test.txt
+
+.PHONY: modules
+modules: get vendor ## Get modules and vendor them
+
+.PHONY: get
+get: ## Pull modules
+	@for module in iofog-go-sdk; do \
+		go get github.com/eclipse-iofog/$$module@$(MODULES_VERSION); \
+	done
 
 .PHONY: vendor
 vendor: # Vendor all deps
