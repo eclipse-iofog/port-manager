@@ -14,37 +14,20 @@
 package manager
 
 import (
-	"fmt"
 	"testing"
+
+	ioclient "github.com/eclipse-iofog/iofog-go-sdk/pkg/client"
 )
 
-func TestPortDecode(t *testing.T) {
-	msvcName := "heart-rate-viewer"
-	msvcUUID := "W6R2RFNBgTYnLtLkQ6yCDDv979QLhFXb"
-	msvcPort := 5000
-	config := createProxyString(msvcName, msvcUUID, msvcPort)
-	ports, err := decodePorts(config, msvcName, msvcUUID)
-	if err != nil {
-		t.Errorf(err.Error())
+func TestProxyString(t *testing.T) {
+	port := ioclient.PublicPort{
+		Queue: "W6R2RFNBgTYnLtLkQ6yCDDv979QLhFXb",
+		Port: 5000,
+		Protocol: "tcp",
 	}
-	if len(ports) != 1 {
-		t.Errorf(fmt.Sprintf("Incorrect number of ports: %d", len(ports)))
-	}
-	if _, exists := ports[msvcPort]; !exists {
-		t.Errorf(fmt.Sprintf("Could not find port %d", msvcPort))
-	}
-	msvcName = msvcName + "2"
-	msvcUUID = "ud32iu23bois90ahdiaojkda"
-	msvcPort = 6000
-	config = fmt.Sprintf("%s,%s", config, createProxyString(msvcName, msvcUUID, msvcPort))
-	ports, err = decodePorts(config, msvcName, msvcUUID)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-	if len(ports) != 1 {
-		t.Errorf(fmt.Sprintf("Incorrect number of ports: %d", len(ports)))
-	}
-	if _, exists := ports[msvcPort]; !exists {
-		t.Errorf(fmt.Sprintf("Could not find port %d", msvcPort))
+
+	config := createProxyString(port)
+	if config != "tcp:5000=>amqp:W6R2RFNBgTYnLtLkQ6yCDDv979QLhFXb" {
+		t.Errorf("Failed to create Proxy string")
 	}
 }
