@@ -135,6 +135,7 @@ func (mgr *Manager) generateCache() error {
 			return err
 		}
 		// Deployment not found, no ports open, nothing to cache
+		fmt.Println(mgr.cache)
 		return nil
 	}
 
