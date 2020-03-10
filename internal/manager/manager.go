@@ -1,7 +1,21 @@
+/*
+ *  *******************************************************************************
+ *  * Copyright (c) 2019 Edgeworx, Inc.
+ *  *
+ *  * This program and the accompanying materials are made available under the
+ *  * terms of the Eclipse Public License v. 2.0 which is available at
+ *  * http://www.eclipse.org/legal/epl-2.0
+ *  *
+ *  * SPDX-License-Identifier: EPL-2.0
+ *  *******************************************************************************
+ *
+ */
+
 package manager
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -28,7 +42,7 @@ const (
 	pollInterval          = time.Second * 10
 )
 
-type portMap map[int]string // map[port]queue
+type portMap map[int]ioclient.PublicPort // Indexed by port
 
 type Manager struct {
 	namespace      string
@@ -121,6 +135,11 @@ func (mgr *Manager) Run() (err error) {
 	}
 }
 
+func (mgr *Manager) printCache() {
+	cache, _ := json.MarshalIndent(mgr.cache, "", "\t")
+	fmt.Println(string(cache))
+}
+
 func (mgr *Manager) generateCache() error {
 	mgr.log.Info("Generating cache based on Kubernetes API")
 
@@ -135,7 +154,7 @@ func (mgr *Manager) generateCache() error {
 			return err
 		}
 		// Deployment not found, no ports open, nothing to cache
-		fmt.Println(mgr.cache)
+		mgr.printCache()
 		return nil
 	}
 
@@ -149,12 +168,12 @@ func (mgr *Manager) generateCache() error {
 	configItems := strings.Split(config, ",")
 	for _, configItem := range configItems {
 		// Get microservice and port details from item
-		port, queue, err := decodeMicroservice(configItem)
+		port, err := decodeMicroservice(configItem)
 		if err != nil {
 			return err
 		}
 		// Update cache
-		mgr.cache[port] = queue
+		mgr.cache[port.Port] = *port
 	}
 
 	fmt.Println(mgr.cache)
@@ -172,21 +191,20 @@ func (mgr *Manager) run() error {
 
 	// Update Proxy config if new ports are created or queues changed
 	for _, backendPort := range backendPorts {
-		port := backendPort.PublicPort.Port
-		queue := backendPort.PublicPort.Queue
-		existingQueue, exists := mgr.cache[port]
+		newPort := backendPort.PublicPort
+		existingPort, exists := mgr.cache[newPort.Port]
 		// Microservice already stored in cache
 		if exists {
 			// Check for queue change
-			if existingQueue != queue {
+			if existingPort.Queue != newPort.Queue || existingPort.Protocol != newPort.Protocol {
 				cacheReconciled = true
 				// Update cache
-				mgr.cache[port] = queue
+				mgr.cache[newPort.Port] = newPort
 			}
 		} else {
 			// New port, update cache
 			cacheReconciled = true
-			mgr.cache[port] = queue
+			mgr.cache[newPort.Port] = newPort
 		}
 	}
 
@@ -309,8 +327,8 @@ func (mgr *Manager) updateProxy() error {
 
 func (mgr *Manager) updateProxyService(foundSvc *corev1.Service) error {
 	foundSvc.Spec.Ports = make([]corev1.ServicePort, 0)
-	for port, queue := range mgr.cache {
-		foundSvc.Spec.Ports = append(foundSvc.Spec.Ports, generateServicePort(port, queue))
+	for _, port := range mgr.cache {
+		foundSvc.Spec.Ports = append(foundSvc.Spec.Ports, generateServicePort(port.Port, port.Queue))
 	}
 
 	// Cannot update service to have 0 ports, delete it

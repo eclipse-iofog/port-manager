@@ -1,3 +1,16 @@
+/*
+ *  *******************************************************************************
+ *  * Copyright (c) 2019 Edgeworx, Inc.
+ *  *
+ *  * This program and the accompanying materials are made available under the
+ *  * terms of the Eclipse Public License v. 2.0 which is available at
+ *  * http://www.eclipse.org/legal/epl-2.0
+ *  *
+ *  * SPDX-License-Identifier: EPL-2.0
+ *  *******************************************************************************
+ *
+ */
+
 package manager
 
 import (
@@ -5,6 +18,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	ioclient "github.com/eclipse-iofog/iofog-go-sdk/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -76,8 +91,8 @@ func newProxyService(namespace string, ports portMap) *corev1.Service {
 		"name": proxyName,
 	}
 	svcPorts := make([]corev1.ServicePort, 0)
-	for port, queue := range ports {
-		svcPorts = append(svcPorts, generateServicePort(port, queue))
+	for _, port := range ports {
+		svcPorts = append(svcPorts, generateServicePort(port.Port, port.Queue))
 	}
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -96,12 +111,12 @@ func newProxyService(namespace string, ports portMap) *corev1.Service {
 
 func createProxyConfig(ports portMap) string {
 	config := ""
-	for port, queue := range ports {
+	for _, port := range ports {
 		separator := ","
 		if config == "" {
 			separator = ""
 		}
-		config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(port, queue))
+		config = fmt.Sprintf("%s%s%s", config, separator, createProxyString(port))
 	}
 	return config
 }
@@ -114,8 +129,8 @@ func updateProxyConfig(dep *appsv1.Deployment, config string) error {
 	return nil
 }
 
-func createProxyString(port int, queue string) string {
-	return fmt.Sprintf("http:%d=>amqp:%s", port, queue)
+func createProxyString(port ioclient.PublicPort) string {
+	return fmt.Sprintf("%s:%d=>amqp:%s", port.Protocol, port.Port, port.Queue)
 }
 
 func getProxyConfig(dep *appsv1.Deployment) (string, error) {
@@ -152,54 +167,33 @@ func decodeConfig(config, startDelim, endDelim string) (ports map[int]bool, err 
 	return
 }
 
-func decodeAllPorts(config string) (ports map[int]bool, err error) {
-	return decodeConfig(config, "http:", "=>")
-}
-
-func decodeMicroservice(configItem string) (port int, queue string, err error) {
-	// http:{msvcPort}=>amqp:{queueName}
-	// Port
-	ports := between(configItem, "http:", "=>")
-	if len(ports) != 1 {
-		err = errors.New("Could not get port from config item " + configItem)
-		return
+func decodeMicroservice(configItem string) (*ioclient.PublicPort, error) {
+	// {protocol}:{msvcPort}=>amqp:{queueName}
+	// Protocol
+	protocol := before(configItem, ":")
+	if protocol != "http" && protocol != "http2" && protocol != "tcp" {
+		return nil, errors.New("Unsupported protocol: " + protocol)
 	}
-	port, err = strconv.Atoi(ports[0])
+	// Port
+	ports := between(configItem, protocol+":", "=>")
+	if len(ports) != 1 {
+		return nil, errors.New("Could not get port from config item " + configItem)
+	}
+	port, err := strconv.Atoi(ports[0])
 	if err != nil {
-		err = errors.New("Failed to convert port string to int: " + ports[0])
-		return
+		return nil, errors.New("Failed to convert port string to int: " + ports[0])
 	}
 	// Queue name
 	ids := strings.SplitAfter(configItem, "=>amqp:")
 	if len(ids) != 2 {
-		err = errors.New("Could not split after =>amqp: in config item " + configItem)
-		return
+		return nil, errors.New("Could not split after =>amqp: in config item " + configItem)
 	}
-	queue = ids[1]
-	return
-}
-
-// Find all substrings between a and b until end
-func between(value string, a string, b string) (substrs []string) {
-	substrs = make([]string, 0)
-	iter := 0
-	for iter < len(value)+1 {
-		posLast := strings.Index(value, b)
-		if posLast == -1 {
-			return
-		}
-		posFirst := strings.LastIndex(value[:posLast], a)
-		if posFirst == -1 {
-			return
-		}
-		posFirstAdjusted := posFirst + len(a)
-		if posFirstAdjusted >= posLast {
-			return
-		}
-		substrs = append(substrs, value[posFirstAdjusted:posLast])
-		value = value[posLast+1:]
-	}
-	return
+	queue := ids[1]
+	return &ioclient.PublicPort{
+		Protocol: protocol,
+		Queue:    queue,
+		Port:     port,
+	}, nil
 }
 
 func generateServicePort(port int, queue string) corev1.ServicePort {
