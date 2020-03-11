@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	ioclient "github.com/eclipse-iofog/iofog-go-sdk/pkg/client"
+	ioclient "github.com/eclipse-iofog/iofog-go-sdk/v2/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
