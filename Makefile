@@ -2,7 +2,7 @@ SHELL = /bin/bash
 OS = $(shell uname -s)
 
 # Project variables
-PACKAGE = github.com/eclipse-iofog/port-manager
+PACKAGE = github.com/eclipse-iofog/port-manager/v2
 BINARY_NAME = port-manager
 IMAGE = iofog/port-manager
 
