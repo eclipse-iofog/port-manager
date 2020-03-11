@@ -16,13 +16,13 @@ package manager
 import (
 	"testing"
 
-	ioclient "github.com/eclipse-iofog/iofog-go-sdk/pkg/client"
+	ioclient "github.com/eclipse-iofog/iofog-go-sdk/v2/pkg/client"
 )
 
 func TestProxyString(t *testing.T) {
 	port := ioclient.PublicPort{
-		Queue: "W6R2RFNBgTYnLtLkQ6yCDDv979QLhFXb",
-		Port: 5000,
+		Queue:    "W6R2RFNBgTYnLtLkQ6yCDDv979QLhFXb",
+		Port:     5000,
 		Protocol: "tcp",
 	}
 
