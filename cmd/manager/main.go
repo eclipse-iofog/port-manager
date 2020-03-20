@@ -27,32 +27,48 @@ func printVersion() {
 	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 }
 
+const (
+	userEmailEnv        = "IOFOG_USER_EMAIL"
+	userPassEnv         = "IOFOG_USER_PASS"
+	proxyImageEnv       = "PROXY_IMAGE"
+	proxyIpEnv          = "PROXY_IP"
+	proxyServiceTypeEnv = "PROXY_SERVICE_TYPE"
+	routerAddressEnv    = "ROUTER_ADDRESS"
+)
+
+type env struct {
+	optional bool
+	key      string
+	value    string
+}
+
 func generateManagerOptions(namespace string, cfg *rest.Config) manager.Options {
-	envs := map[string]string{
-		"IOFOG_USER_EMAIL":   "",
-		"IOFOG_USER_PASS":    "",
-		"PROXY_IMAGE":        "",
-		"PROXY_SERVICE_TYPE": "",
-		"PROXY_IP":           "",
-		"ROUTER_ADDRESS":     "",
+	envs := map[string]env{
+		userEmailEnv:        {key: userEmailEnv},
+		userPassEnv:         {key: userPassEnv},
+		routerAddressEnv:    {key: routerAddressEnv},
+		proxyImageEnv:       {key: proxyImageEnv},
+		proxyServiceTypeEnv: {key: proxyServiceTypeEnv},
+		proxyIpEnv:          {key: proxyIpEnv, optional: true},
 	}
-	for key := range envs {
-		value := os.Getenv(key)
-		if value == "" {
-			log.Error(nil, key+" env var not set")
+	// Read env vars
+	for _, env := range envs {
+		env.value = os.Getenv(env.key)
+		if env.value == "" && !env.optional {
+			log.Error(nil, env.key+" env var not set")
 			os.Exit(1)
 		}
 		// Store result for later
-		envs[key] = value
+		envs[env.key] = env
 	}
 	return manager.Options{
 		Namespace:        namespace,
-		UserEmail:        envs["IOFOG_USER_EMAIL"],
-		UserPass:         envs["IOFOG_USER_PASS"],
-		ProxyImage:       envs["PROXY_IMAGE"],
-		ProxyServiceType: envs["PROXY_SERVICE_TYPE"],
-		ProxyIP:          envs["PROXY_IP"],
-		RouterAddress:    envs["ROUTER_ADDRESS"],
+		UserEmail:        envs[userEmailEnv].value,
+		UserPass:         envs[userPassEnv].value,
+		ProxyImage:       envs[proxyImageEnv].value,
+		ProxyServiceType: envs[proxyServiceTypeEnv].value,
+		ProxyIP:          envs[proxyIpEnv].value,
+		RouterAddress:    envs[routerAddressEnv].value,
 		Config:           cfg,
 	}
 }
