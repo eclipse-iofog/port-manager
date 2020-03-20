@@ -46,7 +46,6 @@ type portMap map[int]ioclient.PublicPort // Indexed by port
 
 type Manager struct {
 	opt            Options
-	namespace      string
 	iofogUserEmail string
 	iofogUserPass  string
 	cache          portMap
@@ -86,7 +85,7 @@ func New(opt Options) *Manager {
 func (mgr *Manager) getOwnerReference() error {
 	objKey := k8sclient.ObjectKey{
 		Name:      managerName,
-		Namespace: mgr.namespace,
+		Namespace: mgr.opt.Namespace,
 	}
 	dep := appsv1.Deployment{}
 	if err := mgr.k8sClient.Get(context.TODO(), objKey, &dep); err != nil {
