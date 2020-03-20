@@ -45,8 +45,8 @@ const (
 type portMap map[int]ioclient.PublicPort // Indexed by port
 
 type Manager struct {
+	opt            Options
 	namespace      string
-	config         *rest.Config
 	iofogUserEmail string
 	iofogUserPass  string
 	cache          portMap
@@ -59,17 +59,24 @@ type Manager struct {
 	routerAddress  string
 }
 
-func New(namespace, iofogUserEmail, iofogUserPass, proxyImage, routerAddress string, config *rest.Config) *Manager {
+type Options struct {
+	Namespace        string
+	UserEmail        string
+	UserPass         string
+	ProxyImage       string
+	ProxyServiceType string
+	ProxyIP          string
+	RouterAddress    string
+	Config           *rest.Config
+}
+
+func New(opt Options) *Manager {
 	logf.SetLogger(logf.ZapLogger(false))
+
 	return &Manager{
-		namespace:      namespace,
-		config:         config,
-		iofogUserEmail: iofogUserEmail,
-		iofogUserPass:  iofogUserPass,
-		cache:          make(portMap),
-		log:            logf.Log.WithName(managerName),
-		proxyImage:     proxyImage,
-		routerAddress:  routerAddress,
+		cache: make(portMap),
+		log:   logf.Log.WithName(managerName),
+		opt:   opt,
 	}
 }
 
@@ -99,7 +106,7 @@ func (mgr *Manager) getOwnerReference() error {
 // Make updates to K8s resources as required
 func (mgr *Manager) Run() (err error) {
 	// Instantiate Kubernetes client
-	if mgr.k8sClient, err = k8sclient.New(mgr.config, k8sclient.Options{}); err != nil {
+	if mgr.k8sClient, err = k8sclient.New(mgr.opt.Config, k8sclient.Options{}); err != nil {
 		return
 	}
 	if mgr.waitClient, err = waitclient.NewInCluster(); err != nil {
@@ -114,8 +121,8 @@ func (mgr *Manager) Run() (err error) {
 	mgr.log.Info("Got owner reference from Kubernetes API Server")
 
 	// Instantiate ioFog client
-	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.namespace, controllerPort)
-	if mgr.ioClient, err = ioclient.NewAndLogin(ioclient.Options{Endpoint: controllerEndpoint}, mgr.iofogUserEmail, mgr.iofogUserPass); err != nil {
+	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.opt.Namespace, controllerPort)
+	if mgr.ioClient, err = ioclient.NewAndLogin(ioclient.Options{Endpoint: controllerEndpoint}, mgr.opt.UserEmail, mgr.opt.UserPass); err != nil {
 		return err
 	}
 	mgr.log.Info("Logged into Controller API")
@@ -146,7 +153,7 @@ func (mgr *Manager) generateCache() error {
 	// Get deployment
 	proxyKey := k8sclient.ObjectKey{
 		Name:      proxyName,
-		Namespace: mgr.namespace,
+		Namespace: mgr.opt.Namespace,
 	}
 	foundDep := appsv1.Deployment{}
 	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, &foundDep); err != nil {
@@ -239,11 +246,11 @@ func (mgr *Manager) deleteProxyDeployment() error {
 	// Dep
 	key := k8sclient.ObjectKey{
 		Name:      proxyName,
-		Namespace: mgr.namespace,
+		Namespace: mgr.opt.Namespace,
 	}
 	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
 		Name:      proxyName,
-		Namespace: mgr.namespace,
+		Namespace: mgr.opt.Namespace,
 	}}
 	if err := mgr.delete(key, dep); err != nil {
 		return err
@@ -255,11 +262,11 @@ func (mgr *Manager) deleteProxyDeployment() error {
 func (mgr *Manager) deleteProxyService() error {
 	proxyKey := k8sclient.ObjectKey{
 		Name:      proxyName,
-		Namespace: mgr.namespace,
+		Namespace: mgr.opt.Namespace,
 	}
 	meta := metav1.ObjectMeta{
 		Name:      proxyName,
-		Namespace: mgr.namespace,
+		Namespace: mgr.opt.Namespace,
 	}
 	svc := &corev1.Service{ObjectMeta: meta}
 	if err := mgr.delete(proxyKey, svc); err != nil {
@@ -273,7 +280,7 @@ func (mgr *Manager) updateProxy() error {
 	// Key to check resources don't already exist
 	proxyKey := k8sclient.ObjectKey{
 		Name:      proxyName,
-		Namespace: mgr.namespace,
+		Namespace: mgr.opt.Namespace,
 	}
 
 	// Deployment
@@ -288,7 +295,7 @@ func (mgr *Manager) updateProxy() error {
 			return err
 		}
 		// Create new deployment
-		dep := newProxyDeployment(mgr.namespace, mgr.proxyImage, 1, createProxyConfig(mgr.cache), mgr.routerAddress)
+		dep := newProxyDeployment(mgr.opt.Namespace, mgr.opt.ProxyImage, 1, createProxyConfig(mgr.cache), mgr.opt.RouterAddress)
 		mgr.setOwnerReference(dep)
 		if err := mgr.k8sClient.Create(context.TODO(), dep); err != nil {
 			return err
@@ -307,7 +314,7 @@ func (mgr *Manager) updateProxy() error {
 			return err
 		}
 		// Create new service
-		svc := newProxyService(mgr.namespace, mgr.cache)
+		svc := newProxyService(mgr.opt.Namespace, mgr.cache, mgr.opt.ProxyServiceType, mgr.opt.ProxyIP)
 		mgr.setOwnerReference(svc)
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
