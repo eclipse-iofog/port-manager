@@ -119,7 +119,13 @@ func (mgr *Manager) Run() (err error) {
 	}
 	mgr.log.Info("Got owner reference from Kubernetes API Server")
 
-	// Instantiate ioFog client
+	// Set up ioFog client
+	ioclient.SetGlobalRetries(ioclient.Retries{
+		CustomMessage: map[string]int{
+			"timeout": 10,
+			"refuse":  10,
+		},
+	})
 	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.opt.Namespace, controllerPort)
 	if mgr.ioClient, err = ioclient.NewAndLogin(ioclient.Options{Endpoint: controllerEndpoint}, mgr.opt.UserEmail, mgr.opt.UserPass); err != nil {
 		return err
