@@ -69,14 +69,15 @@ type Options struct {
 	Config           *rest.Config
 }
 
-func New(opt Options) *Manager {
+func New(opt Options) (*Manager, error) {
 	logf.SetLogger(logf.ZapLogger(false))
 
-	return &Manager{
+	mgr := &Manager{
 		cache: make(portMap),
 		log:   logf.Log.WithName(managerName),
 		opt:   opt,
 	}
+	return mgr, mgr.init()
 }
 
 // Query the K8s API Server for details of this pod's deployment
@@ -97,7 +98,7 @@ func (mgr *Manager) getOwnerReference() error {
 		Name:       dep.Name,
 		UID:        dep.UID,
 	}
-	return mgr.init()
+	return nil
 }
 
 func (mgr *Manager) init() (err error) {

@@ -123,7 +123,7 @@ func main() {
 	opt := generateManagerOptions(namespace, cfg)
 
 	// Instantiate Manager
-	mgr := manager.New(opt)
+	mgr, err := manager.New(opt)
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
