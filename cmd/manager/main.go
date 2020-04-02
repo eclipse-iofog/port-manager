@@ -120,11 +120,19 @@ func main() {
 	}()
 
 	// Generate options for manager instance
-	mgrOpt := generateManagerOptions(namespace, cfg)
+	opt := generateManagerOptions(namespace, cfg)
 
-	// Run
-	if err = manager.New(mgrOpt).Run(); err != nil {
+	// Instantiate Manager
+	mgr := manager.New(opt)
+	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
+	}
+
+	// Run loop
+	for {
+		if err = mgr.Run(); err != nil {
+			log.Error(err, "")
+		}
 	}
 }

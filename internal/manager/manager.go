@@ -97,13 +97,10 @@ func (mgr *Manager) getOwnerReference() error {
 		Name:       dep.Name,
 		UID:        dep.UID,
 	}
-	return nil
+	return mgr.init()
 }
 
-// Main loop of manager
-// Query ioFog Controller REST API and compare against cache
-// Make updates to K8s resources as required
-func (mgr *Manager) Run() (err error) {
+func (mgr *Manager) init() (err error) {
 	// Instantiate Kubernetes client
 	if mgr.k8sClient, err = k8sclient.New(mgr.opt.Config, k8sclient.Options{}); err != nil {
 		return
@@ -131,7 +128,13 @@ func (mgr *Manager) Run() (err error) {
 		return err
 	}
 	mgr.log.Info("Logged into Controller API")
+	return
+}
 
+// Main loop of manager
+// Query ioFog Controller REST API and compare against cache
+// Make updates to K8s resources as required
+func (mgr *Manager) Run() (err error) {
 	// Initialize cache based on K8s API
 	if err := mgr.generateCache(); err != nil {
 		return err
@@ -141,7 +144,6 @@ func (mgr *Manager) Run() (err error) {
 	for {
 		time.Sleep(pollInterval)
 		if err := mgr.run(); err != nil {
-			// Exit with error to reset the cache
 			return err
 		}
 	}
@@ -154,6 +156,8 @@ func (mgr *Manager) printCache() {
 
 func (mgr *Manager) generateCache() error {
 	mgr.log.Info("Generating cache based on Kubernetes API")
+	// Clear the cache
+	mgr.cache = make(portMap)
 
 	// Get deployment
 	proxyKey := k8sclient.ObjectKey{
