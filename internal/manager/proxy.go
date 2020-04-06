@@ -86,7 +86,7 @@ func getRouterConfig(routerHost string) string {
 	return strings.Replace(config, "<ROUTER>", routerHost, 1)
 }
 
-func newProxyService(namespace string, ports portMap) *corev1.Service {
+func newProxyService(namespace string, ports portMap, svcType, ip string) *corev1.Service {
 	labels := map[string]string{
 		"name": proxyName,
 	}
@@ -101,8 +101,9 @@ func newProxyService(namespace string, ports portMap) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Type:                  corev1.ServiceTypeLoadBalancer,
-			ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyTypeLocal,
+			Type:                  corev1.ServiceType(svcType),
+			ExternalTrafficPolicy: getTrafficPolicy(svcType),
+			LoadBalancerIP:        ip,
 			Selector:              labels,
 			Ports:                 svcPorts,
 		},
@@ -203,4 +204,11 @@ func generateServicePort(port int, queue string) corev1.ServicePort {
 		TargetPort: intstr.FromInt(port),
 		Protocol:   corev1.Protocol("TCP"),
 	}
+}
+
+func getTrafficPolicy(serviceType string) corev1.ServiceExternalTrafficPolicyType {
+	if serviceType == string(corev1.ServiceTypeLoadBalancer) {
+		return corev1.ServiceExternalTrafficPolicyTypeLocal
+	}
+	return corev1.ServiceExternalTrafficPolicyTypeCluster
 }

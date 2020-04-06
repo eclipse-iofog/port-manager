@@ -12,6 +12,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/ready"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 
@@ -24,6 +25,52 @@ func printVersion() {
 	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
+}
+
+const (
+	userEmailEnv        = "IOFOG_USER_EMAIL"
+	userPassEnv         = "IOFOG_USER_PASS"
+	proxyImageEnv       = "PROXY_IMAGE"
+	proxyIpEnv          = "PROXY_IP"
+	proxyServiceTypeEnv = "PROXY_SERVICE_TYPE"
+	routerAddressEnv    = "ROUTER_ADDRESS"
+)
+
+type env struct {
+	optional bool
+	key      string
+	value    string
+}
+
+func generateManagerOptions(namespace string, cfg *rest.Config) manager.Options {
+	envs := map[string]env{
+		userEmailEnv:        {key: userEmailEnv},
+		userPassEnv:         {key: userPassEnv},
+		routerAddressEnv:    {key: routerAddressEnv},
+		proxyImageEnv:       {key: proxyImageEnv},
+		proxyServiceTypeEnv: {key: proxyServiceTypeEnv},
+		proxyIpEnv:          {key: proxyIpEnv, optional: true},
+	}
+	// Read env vars
+	for _, env := range envs {
+		env.value = os.Getenv(env.key)
+		if env.value == "" && !env.optional {
+			log.Error(nil, env.key+" env var not set")
+			os.Exit(1)
+		}
+		// Store result for later
+		envs[env.key] = env
+	}
+	return manager.Options{
+		Namespace:        namespace,
+		UserEmail:        envs[userEmailEnv].value,
+		UserPass:         envs[userPassEnv].value,
+		ProxyImage:       envs[proxyImageEnv].value,
+		ProxyServiceType: envs[proxyServiceTypeEnv].value,
+		ProxyIP:          envs[proxyIpEnv].value,
+		RouterAddress:    envs[routerAddressEnv].value,
+		Config:           cfg,
+	}
 }
 
 func main() {
@@ -42,23 +89,6 @@ func main() {
 	if err != nil {
 		log.Error(err, "Failed to get watch namespace")
 		os.Exit(1)
-	}
-
-	// Get Controller access token from environment variable
-	envs := []string{
-		"IOFOG_USER_EMAIL",
-		"IOFOG_USER_PASS",
-		"PROXY_IMAGE",
-		"ROUTER_ADDRESS",
-	}
-	for idx, envVar := range envs {
-		env := os.Getenv(envVar)
-		if env == "" {
-			log.Error(nil, envVar+" env var not set")
-			os.Exit(1)
-		}
-		// Store result for later
-		envs[idx] = env
 	}
 
 	// Get a config to talk to the apiserver
@@ -89,9 +119,20 @@ func main() {
 		}
 	}()
 
-	// Run
-	if err = manager.New(namespace, envs[0], envs[1], envs[2], envs[3], cfg).Run(); err != nil {
+	// Generate options for manager instance
+	opt := generateManagerOptions(namespace, cfg)
+
+	// Instantiate Manager
+	mgr, err := manager.New(opt)
+	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
+	}
+
+	// Run loop
+	for {
+		if err = mgr.Run(); err != nil {
+			log.Error(err, "")
+		}
 	}
 }
