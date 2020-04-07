@@ -56,7 +56,7 @@ type Manager struct {
 	owner          metav1.OwnerReference
 	proxyImage     string
 	routerAddress  string
-	addressChan    chan bool
+	addressChan    chan interface{}
 }
 
 type Options struct {
@@ -77,7 +77,7 @@ func New(opt Options) (*Manager, error) {
 		cache:       make(portMap),
 		log:         logf.Log.WithName(managerName),
 		opt:         opt,
-		addressChan: make(chan bool),
+		addressChan: make(chan interface{}, 5),
 	}
 	return mgr, mgr.init()
 }
@@ -143,7 +143,7 @@ func (mgr *Manager) init() (err error) {
 	}
 	if svcErr := mgr.k8sClient.Get(context.TODO(), proxyKey, &svc); svcErr == nil {
 		// Register Service IP
-		mgr.addressChan <- true
+		mgr.addressChan <- nil
 	}
 
 	return
@@ -346,7 +346,7 @@ func (mgr *Manager) updateProxy() error {
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
 		}
-		mgr.addressChan <- true
+		mgr.addressChan <- nil
 	}
 
 	return nil
@@ -359,25 +359,26 @@ func (mgr *Manager) registerProxyAddress() {
 		_ = <-mgr.addressChan
 		// Get Service address
 		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
-		// Retry loop
-		for err != nil {
+		if err != nil {
 			mgr.log.Error(err, "Failed to find IP address of Proxy Service")
 			// Wait
 			time.Sleep(5 * time.Second)
 			// Retry
-			ip, err = mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
+			mgr.addressChan <- nil
+			continue
 		}
 
 		// Attempt to register
 		err = mgr.ioClient.PutDefaultProxy(ip)
-		// Retry loop
-		for err != nil {
+		if err != nil {
 			mgr.log.Error(err, "Failed to register Proxy address "+ip)
 			// Wait
 			time.Sleep(5 * time.Second)
 			// Retry
-			err = mgr.ioClient.PutDefaultProxy(ip)
+			mgr.addressChan <- nil
+			continue
 		}
+
 		mgr.log.Info("Successfully registered Proxy address " + ip)
 	}
 }
