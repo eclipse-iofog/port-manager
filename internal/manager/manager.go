@@ -135,8 +135,16 @@ func (mgr *Manager) init() (err error) {
 	// Start address register routine
 	go mgr.registerProxyAddress()
 
-	// Register IP if Service exists
-	mgr.addressChan <- false
+	// Check if Proxy Service exists
+	svc := corev1.Service{}
+	proxyKey := k8sclient.ObjectKey{
+		Name:      proxyName,
+		Namespace: mgr.opt.Namespace,
+	}
+	if err = mgr.k8sClient.Get(context.TODO(), proxyKey, &svc); err == nil {
+		// Register Service IP
+		mgr.addressChan <- true
+	}
 
 	return
 }
@@ -348,13 +356,9 @@ func (mgr *Manager) registerProxyAddress() {
 	timeout := int64(60)
 	for {
 		// Wait signal (blocking)
-		mustExist := <-mgr.addressChan
+		_ = <-mgr.addressChan
 		// Get Service address
 		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
-		if !mustExist && k8serrors.IsNotFound(err) {
-			continue
-		}
-
 		// Retry loop
 		for err != nil {
 			mgr.log.Error(err, "Failed to find IP address of Proxy Service")
