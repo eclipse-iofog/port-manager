@@ -345,11 +345,12 @@ func (mgr *Manager) updateProxy() error {
 }
 
 func (mgr *Manager) registerProxyAddress() {
+	timeout := int64(60)
 	for {
 		// Wait signal (blocking)
 		mustExist := <-mgr.addressChan
 		// Get Service address
-		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, 5)
+		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
 		if !mustExist && k8serrors.IsNotFound(err) {
 			continue
 		}
@@ -360,7 +361,7 @@ func (mgr *Manager) registerProxyAddress() {
 			// Wait
 			time.Sleep(5 * time.Second)
 			// Retry
-			ip, err = mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, 5)
+			ip, err = mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
 		}
 
 		// Attempt to register
