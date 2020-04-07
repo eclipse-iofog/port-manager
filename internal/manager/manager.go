@@ -56,6 +56,7 @@ type Manager struct {
 	owner          metav1.OwnerReference
 	proxyImage     string
 	routerAddress  string
+	addressChan    chan string
 }
 
 type Options struct {
@@ -73,9 +74,10 @@ func New(opt Options) (*Manager, error) {
 	logf.SetLogger(logf.ZapLogger(false))
 
 	mgr := &Manager{
-		cache: make(portMap),
-		log:   logf.Log.WithName(managerName),
-		opt:   opt,
+		cache:       make(portMap),
+		log:         logf.Log.WithName(managerName),
+		opt:         opt,
+		addressChan: make(chan string),
 	}
 	return mgr, mgr.init()
 }
@@ -112,8 +114,8 @@ func (mgr *Manager) init() (err error) {
 	mgr.log.Info("Created Kubernetes clients")
 
 	// Get owner reference
-	if err := mgr.getOwnerReference(); err != nil {
-		return err
+	if err = mgr.getOwnerReference(); err != nil {
+		return
 	}
 	mgr.log.Info("Got owner reference from Kubernetes API Server")
 
@@ -126,9 +128,19 @@ func (mgr *Manager) init() (err error) {
 	})
 	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.opt.Namespace, controllerPort)
 	if mgr.ioClient, err = ioclient.NewAndLogin(ioclient.Options{Endpoint: controllerEndpoint}, mgr.opt.UserEmail, mgr.opt.UserPass); err != nil {
-		return err
+		return
 	}
 	mgr.log.Info("Logged into Controller API")
+
+	// Start address register routine
+	go mgr.registeryProxyAddress()
+
+	// Make sure that latest proxy address is registered
+	ip, ipErr := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, 5)
+	if ipErr == nil && ip != "" {
+		mgr.addressChan <- ip
+	}
+
 	return
 }
 
@@ -330,16 +342,39 @@ func (mgr *Manager) updateProxy() error {
 			return err
 		}
 		// Give Controller service IP
-		ip, err := mgr.waitClient.WaitForLoadBalancer(svc.Namespace, svc.Name, 120)
+		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, 120)
 		if err != nil {
 			return err
 		}
-		if err := mgr.ioClient.PutDefaultProxy(ip); err != nil {
-			return err
-		}
+		mgr.addressChan <- ip
 	}
 
 	return nil
+}
+
+func (mgr *Manager) registeryProxyAddress() {
+	for {
+		// Wait for an initial address (blocking)
+		addr := <-mgr.addressChan
+		// Attempt to register
+		err := mgr.ioClient.PutDefaultProxy(addr)
+		for err != nil {
+			mgr.log.Error(err, "Failed to register Proxy address "+addr)
+
+			// Wait
+			time.Sleep(5 * time.Second)
+
+			// Check for new address (non-blocking)
+			select {
+			case addr = <-mgr.addressChan:
+			default:
+			}
+
+			// Retry
+			err = mgr.ioClient.PutDefaultProxy(addr)
+		}
+		mgr.log.Info("Successfully registered Proxy address " + addr)
+	}
 }
 
 func (mgr *Manager) updateProxyService(foundSvc *corev1.Service) error {
