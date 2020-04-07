@@ -56,7 +56,7 @@ type Manager struct {
 	owner          metav1.OwnerReference
 	proxyImage     string
 	routerAddress  string
-	addressChan    chan string
+	addressChan    chan bool
 }
 
 type Options struct {
@@ -77,7 +77,7 @@ func New(opt Options) (*Manager, error) {
 		cache:       make(portMap),
 		log:         logf.Log.WithName(managerName),
 		opt:         opt,
-		addressChan: make(chan string),
+		addressChan: make(chan bool),
 	}
 	return mgr, mgr.init()
 }
@@ -133,13 +133,10 @@ func (mgr *Manager) init() (err error) {
 	mgr.log.Info("Logged into Controller API")
 
 	// Start address register routine
-	go mgr.registeryProxyAddress()
+	go mgr.registerProxyAddress()
 
-	// Make sure that latest proxy address is registered
-	ip, ipErr := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, 5)
-	if ipErr == nil {
-		mgr.addressChan <- ip
-	}
+	// Register IP if Service exists
+	mgr.addressChan <- false
 
 	return
 }
@@ -341,39 +338,42 @@ func (mgr *Manager) updateProxy() error {
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
 		}
-		// Give Controller service IP
-		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, 120)
-		if err != nil {
-			return err
-		}
-		mgr.addressChan <- ip
+		mgr.addressChan <- true
 	}
 
 	return nil
 }
 
-func (mgr *Manager) registeryProxyAddress() {
+func (mgr *Manager) registerProxyAddress() {
 	for {
-		// Wait for an initial address (blocking)
-		addr := <-mgr.addressChan
-		// Attempt to register
-		err := mgr.ioClient.PutDefaultProxy(addr)
-		for err != nil {
-			mgr.log.Error(err, "Failed to register Proxy address "+addr)
+		// Wait signal (blocking)
+		mustExist := <-mgr.addressChan
+		// Get Service address
+		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, 5)
+		if !mustExist && k8serrors.IsNotFound(err) {
+			continue
+		}
 
+		// Retry loop
+		for err != nil {
+			mgr.log.Error(err, "Failed to find IP address of Proxy Service")
 			// Wait
 			time.Sleep(5 * time.Second)
-
-			// Check for new address (non-blocking)
-			select {
-			case addr = <-mgr.addressChan:
-			default:
-			}
-
 			// Retry
-			err = mgr.ioClient.PutDefaultProxy(addr)
+			ip, err = mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, 5)
 		}
-		mgr.log.Info("Successfully registered Proxy address " + addr)
+
+		// Attempt to register
+		err = mgr.ioClient.PutDefaultProxy(ip)
+		// Retry loop
+		for err != nil {
+			mgr.log.Error(err, "Failed to register Proxy address "+ip)
+			// Wait
+			time.Sleep(5 * time.Second)
+			// Retry
+			err = mgr.ioClient.PutDefaultProxy(ip)
+		}
+		mgr.log.Info("Successfully registered Proxy address " + ip)
 	}
 }
 
