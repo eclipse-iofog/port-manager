@@ -137,7 +137,7 @@ func (mgr *Manager) init() (err error) {
 
 	// Make sure that latest proxy address is registered
 	ip, ipErr := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, 5)
-	if ipErr == nil && ip != "" {
+	if ipErr == nil {
 		mgr.addressChan <- ip
 	}
 
