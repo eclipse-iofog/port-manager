@@ -141,7 +141,7 @@ func (mgr *Manager) init() (err error) {
 		Name:      proxyName,
 		Namespace: mgr.opt.Namespace,
 	}
-	if err = mgr.k8sClient.Get(context.TODO(), proxyKey, &svc); err == nil {
+	if svcErr := mgr.k8sClient.Get(context.TODO(), proxyKey, &svc); svcErr == nil {
 		// Register Service IP
 		mgr.addressChan <- true
 	}
