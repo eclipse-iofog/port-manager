@@ -355,7 +355,7 @@ func (mgr *Manager) updateProxy() error {
 func (mgr *Manager) registerProxyAddress() {
 	timeout := int64(60)
 	for {
-		// Wait signal (blocking)
+		// Wait for signal
 		_ = <-mgr.addressChan
 		// Get Service address
 		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
