@@ -356,7 +356,7 @@ func (mgr *Manager) registerProxyAddress() {
 	timeout := int64(60)
 	for {
 		// Wait for signal
-		_ = <-mgr.addressChan
+		<-mgr.addressChan
 		// Get Service address
 		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
 		if err != nil {
