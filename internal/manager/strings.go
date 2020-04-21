@@ -14,6 +14,7 @@
 package manager
 
 import (
+	"encoding/base64"
 	"strings"
 )
 
@@ -54,4 +55,12 @@ func after(input string, substr string) string {
 		return ""
 	}
 	return input[pos+1:]
+}
+
+func decodeBase64(encoded string) (string, error) {
+	decodedBytes, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", err
+	}
+	return string(decodedBytes), nil
 }

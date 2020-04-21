@@ -73,6 +73,10 @@ type Options struct {
 func New(opt Options) (*Manager, error) {
 	logf.SetLogger(logf.ZapLogger(false))
 
+	password, err := decodeBase64(opt.UserPass)
+	if err == nil {
+		opt.UserPass = password
+	}
 	mgr := &Manager{
 		cache:       make(portMap),
 		log:         logf.Log.WithName(managerName),
@@ -122,8 +126,9 @@ func (mgr *Manager) init() (err error) {
 	// Set up ioFog client
 	ioclient.SetGlobalRetries(ioclient.Retries{
 		CustomMessage: map[string]int{
-			"timeout": 10,
-			"refuse":  10,
+			"timeout":    10,
+			"refuse":     10,
+			"credential": 10,
 		},
 	})
 	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.opt.Namespace, controllerPort)
