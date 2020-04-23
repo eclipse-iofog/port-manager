@@ -56,6 +56,7 @@ type Manager struct {
 	owner          metav1.OwnerReference
 	proxyImage     string
 	routerAddress  string
+	addressChan    chan interface{}
 }
 
 type Options struct {
@@ -72,10 +73,15 @@ type Options struct {
 func New(opt Options) (*Manager, error) {
 	logf.SetLogger(logf.ZapLogger(false))
 
+	password, err := decodeBase64(opt.UserPass)
+	if err == nil {
+		opt.UserPass = password
+	}
 	mgr := &Manager{
-		cache: make(portMap),
-		log:   logf.Log.WithName(managerName),
-		opt:   opt,
+		cache:       make(portMap),
+		log:         logf.Log.WithName(managerName),
+		opt:         opt,
+		addressChan: make(chan interface{}, 5),
 	}
 	return mgr, mgr.init()
 }
@@ -112,23 +118,39 @@ func (mgr *Manager) init() (err error) {
 	mgr.log.Info("Created Kubernetes clients")
 
 	// Get owner reference
-	if err := mgr.getOwnerReference(); err != nil {
-		return err
+	if err = mgr.getOwnerReference(); err != nil {
+		return
 	}
 	mgr.log.Info("Got owner reference from Kubernetes API Server")
 
 	// Set up ioFog client
 	ioclient.SetGlobalRetries(ioclient.Retries{
 		CustomMessage: map[string]int{
-			"timeout": 10,
-			"refuse":  10,
+			"timeout":    10,
+			"refuse":     10,
+			"credential": 10,
 		},
 	})
 	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.opt.Namespace, controllerPort)
 	if mgr.ioClient, err = ioclient.NewAndLogin(ioclient.Options{Endpoint: controllerEndpoint}, mgr.opt.UserEmail, mgr.opt.UserPass); err != nil {
-		return err
+		return
 	}
 	mgr.log.Info("Logged into Controller API")
+
+	// Start address register routine
+	go mgr.registerProxyAddress()
+
+	// Check if Proxy Service exists
+	svc := corev1.Service{}
+	proxyKey := k8sclient.ObjectKey{
+		Name:      proxyName,
+		Namespace: mgr.opt.Namespace,
+	}
+	if svcErr := mgr.k8sClient.Get(context.TODO(), proxyKey, &svc); svcErr == nil {
+		// Register Service IP
+		mgr.addressChan <- nil
+	}
+
 	return
 }
 
@@ -329,17 +351,41 @@ func (mgr *Manager) updateProxy() error {
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
 		}
-		// Give Controller service IP
-		ip, err := mgr.waitClient.WaitForLoadBalancer(svc.Namespace, svc.Name, 120)
-		if err != nil {
-			return err
-		}
-		if err := mgr.ioClient.PutDefaultProxy(ip); err != nil {
-			return err
-		}
+		mgr.addressChan <- nil
 	}
 
 	return nil
+}
+
+func (mgr *Manager) registerProxyAddress() {
+	timeout := int64(60)
+	for {
+		// Wait for signal
+		<-mgr.addressChan
+		// Get Service address
+		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
+		if err != nil {
+			mgr.log.Error(err, "Failed to find IP address of Proxy Service")
+			// Wait
+			time.Sleep(5 * time.Second)
+			// Retry
+			mgr.addressChan <- nil
+			continue
+		}
+
+		// Attempt to register
+		err = mgr.ioClient.PutDefaultProxy(ip)
+		if err != nil {
+			mgr.log.Error(err, "Failed to register Proxy address "+ip)
+			// Wait
+			time.Sleep(5 * time.Second)
+			// Retry
+			mgr.addressChan <- nil
+			continue
+		}
+
+		mgr.log.Info("Successfully registered Proxy address " + ip)
+	}
 }
 
 func (mgr *Manager) updateProxyService(foundSvc *corev1.Service) error {
