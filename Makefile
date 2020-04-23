@@ -23,7 +23,7 @@ MINOR ?= $(shell cat version | grep MINOR | sed 's/MINOR=//g')
 PATCH ?= $(shell cat version | grep PATCH | sed 's/PATCH=//g')
 SUFFIX ?= $(shell cat version | grep SUFFIX | sed 's/SUFFIX=//g')
 VERSION = $(MAJOR).$(MINOR).$(PATCH)$(SUFFIX)
-GO_SDK_MODULE = iofog-go-sdk/v2@v2.0.0-beta2
+GO_SDK_MODULE = iofog-go-sdk/v2@v2.0.0-beta3
 
 .PHONY: clean
 clean: ## Clean the working area and the project
