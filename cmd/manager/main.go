@@ -31,7 +31,7 @@ const (
 	userEmailEnv        = "IOFOG_USER_EMAIL"
 	userPassEnv         = "IOFOG_USER_PASS"
 	proxyImageEnv       = "PROXY_IMAGE"
-	proxyIpEnv          = "PROXY_IP"
+	proxyAddressEnv     = "PROXY_ADDRESS"
 	proxyServiceTypeEnv = "PROXY_SERVICE_TYPE"
 	routerAddressEnv    = "ROUTER_ADDRESS"
 )
@@ -49,7 +49,7 @@ func generateManagerOptions(namespace string, cfg *rest.Config) manager.Options 
 		routerAddressEnv:    {key: routerAddressEnv},
 		proxyImageEnv:       {key: proxyImageEnv},
 		proxyServiceTypeEnv: {key: proxyServiceTypeEnv},
-		proxyIpEnv:          {key: proxyIpEnv, optional: true},
+		proxyAddressEnv:     {key: proxyAddressEnv, optional: true},
 	}
 	// Read env vars
 	for _, env := range envs {
@@ -67,7 +67,7 @@ func generateManagerOptions(namespace string, cfg *rest.Config) manager.Options 
 		UserPass:         envs[userPassEnv].value,
 		ProxyImage:       envs[proxyImageEnv].value,
 		ProxyServiceType: envs[proxyServiceTypeEnv].value,
-		ProxyIP:          envs[proxyIpEnv].value,
+		ProxyAddress:     envs[proxyAddressEnv].value,
 		RouterAddress:    envs[routerAddressEnv].value,
 		Config:           cfg,
 	}

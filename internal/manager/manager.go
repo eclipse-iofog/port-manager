@@ -65,7 +65,7 @@ type Options struct {
 	UserPass         string
 	ProxyImage       string
 	ProxyServiceType string
-	ProxyIP          string
+	ProxyAddress     string
 	RouterAddress    string
 	Config           *rest.Config
 }
@@ -346,7 +346,7 @@ func (mgr *Manager) updateProxy() error {
 			return err
 		}
 		// Create new service
-		svc := newProxyService(mgr.opt.Namespace, mgr.cache, mgr.opt.ProxyServiceType, mgr.opt.ProxyIP)
+		svc := newProxyService(mgr.opt.Namespace, mgr.cache, mgr.opt.ProxyServiceType, mgr.opt.ProxyAddress)
 		mgr.setOwnerReference(svc)
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
