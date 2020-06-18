@@ -62,14 +62,14 @@ func generateManagerOptions(namespace string, cfg *rest.Config) manager.Options 
 		envs[env.key] = env
 	}
 	return manager.Options{
-		Namespace:        namespace,
-		UserEmail:        envs[userEmailEnv].value,
-		UserPass:         envs[userPassEnv].value,
-		ProxyImage:       envs[proxyImageEnv].value,
-		ProxyServiceType: envs[proxyServiceTypeEnv].value,
-		ProxyAddress:     envs[proxyAddressEnv].value,
-		RouterAddress:    envs[routerAddressEnv].value,
-		Config:           cfg,
+		Namespace:            namespace,
+		UserEmail:            envs[userEmailEnv].value,
+		UserPass:             envs[userPassEnv].value,
+		ProxyImage:           envs[proxyImageEnv].value,
+		ProxyServiceType:     envs[proxyServiceTypeEnv].value,
+		ProxyExternalAddress: envs[proxyAddressEnv].value,
+		RouterAddress:        envs[routerAddressEnv].value,
+		Config:               cfg,
 	}
 }
 

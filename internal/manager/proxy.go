@@ -86,15 +86,11 @@ func getRouterConfig(routerHost string) string {
 	return strings.Replace(config, "<ROUTER>", routerHost, 1)
 }
 
-func newProxyService(namespace string, ports portMap, svcType, address string) *corev1.Service {
+func newProxyService(namespace string, ports portMap, svcType string) *corev1.Service {
 	labels := map[string]string{
 		"name": proxyName,
 	}
-	svcPorts := make([]corev1.ServicePort, 0)
-	for _, port := range ports {
-		svcPorts = append(svcPorts, generateServicePort(port.Port, port.Queue))
-	}
-	return &corev1.Service{
+	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      proxyName,
 			Namespace: namespace,
@@ -103,11 +99,12 @@ func newProxyService(namespace string, ports portMap, svcType, address string) *
 		Spec: corev1.ServiceSpec{
 			Type:                  corev1.ServiceType(svcType),
 			ExternalTrafficPolicy: getTrafficPolicy(svcType),
-			LoadBalancerIP:        address,
 			Selector:              labels,
-			Ports:                 svcPorts,
 		},
 	}
+	modifyServiceSpec(svc, ports)
+
+	return svc
 }
 
 func createProxyConfig(ports portMap) string {
@@ -211,4 +208,19 @@ func getTrafficPolicy(serviceType string) corev1.ServiceExternalTrafficPolicyTyp
 		return corev1.ServiceExternalTrafficPolicyTypeLocal
 	}
 	return corev1.ServiceExternalTrafficPolicyTypeCluster
+}
+
+func modifyServiceSpec(svc *corev1.Service, ports portMap) {
+	tcpAnnotation := svc.ObjectMeta.Annotations[tcpAnnotationKey]
+	for _, port := range ports {
+		// Add port to svc spec
+		svc.Spec.Ports = append(svc.Spec.Ports, generateServicePort(port.Port, port.Queue))
+		// Add tcp annotation
+		if port.Protocol == "tcp" || port.Protocol == "TCP" {
+			portString := strconv.Itoa(port.Port)
+			if !strings.Contains(tcpAnnotation, portString) {
+				tcpAnnotation = fmt.Sprintf("%s %s", tcpAnnotation, portString)
+			}
+		}
+	}
 }
