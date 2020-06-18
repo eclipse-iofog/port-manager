@@ -40,6 +40,7 @@ const (
 	controllerPort        = 51121
 	managerName           = "port-manager"
 	pollInterval          = time.Second * 10
+	tcpAnnotationKey      = "iofog.org/tcp"
 )
 
 type portMap map[int]ioclient.PublicPort // Indexed by port
@@ -56,18 +57,18 @@ type Manager struct {
 	owner          metav1.OwnerReference
 	proxyImage     string
 	routerAddress  string
-	addressChan    chan interface{}
+	addressChan    chan string
 }
 
 type Options struct {
-	Namespace        string
-	UserEmail        string
-	UserPass         string
-	ProxyImage       string
-	ProxyServiceType string
-	ProxyAddress     string
-	RouterAddress    string
-	Config           *rest.Config
+	Namespace            string
+	UserEmail            string
+	UserPass             string
+	ProxyImage           string
+	ProxyServiceType     string
+	ProxyExternalAddress string
+	RouterAddress        string
+	Config               *rest.Config
 }
 
 func New(opt Options) (*Manager, error) {
@@ -81,7 +82,7 @@ func New(opt Options) (*Manager, error) {
 		cache:       make(portMap),
 		log:         logf.Log.WithName(managerName),
 		opt:         opt,
-		addressChan: make(chan interface{}, 5),
+		addressChan: make(chan string, 5),
 	}
 	return mgr, mgr.init()
 }
@@ -148,7 +149,7 @@ func (mgr *Manager) init() (err error) {
 	}
 	if svcErr := mgr.k8sClient.Get(context.TODO(), proxyKey, &svc); svcErr == nil {
 		// Register Service IP
-		mgr.addressChan <- nil
+		mgr.addressChan <- mgr.opt.ProxyExternalAddress
 	}
 
 	return
@@ -346,12 +347,13 @@ func (mgr *Manager) updateProxy() error {
 			return err
 		}
 		// Create new service
-		svc := newProxyService(mgr.opt.Namespace, mgr.cache, mgr.opt.ProxyServiceType, mgr.opt.ProxyAddress)
+		svc := newProxyService(mgr.opt.Namespace, mgr.cache, mgr.opt.ProxyServiceType)
 		mgr.setOwnerReference(svc)
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
 		}
-		mgr.addressChan <- nil
+		// Trigger address registration for Controller
+		mgr.addressChan <- mgr.opt.ProxyExternalAddress
 	}
 
 	return nil
@@ -359,40 +361,43 @@ func (mgr *Manager) updateProxy() error {
 
 func (mgr *Manager) registerProxyAddress() {
 	timeout := int64(60)
+	var err error
+
 	for {
 		// Wait for signal
-		<-mgr.addressChan
-		// Get Service address
-		ip, err := mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
-		if err != nil {
-			mgr.log.Error(err, "Failed to find IP address of Proxy Service")
-			// Wait
-			time.Sleep(5 * time.Second)
-			// Retry
-			mgr.addressChan <- nil
-			continue
+		addr := <-mgr.addressChan
+
+		if addr == "" {
+			// Wait for LB Service
+			addr, err = mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
+			if err != nil {
+				mgr.log.Error(err, "Failed to find IP address of Proxy Service")
+				// Wait
+				time.Sleep(5 * time.Second)
+				// Retry
+				mgr.addressChan <- ""
+				continue
+			}
 		}
 
 		// Attempt to register
-		err = mgr.ioClient.PutDefaultProxy(ip)
+		err = mgr.ioClient.PutDefaultProxy(addr)
 		if err != nil {
-			mgr.log.Error(err, "Failed to register Proxy address "+ip)
+			mgr.log.Error(err, "Failed to register Proxy address "+addr)
 			// Wait
 			time.Sleep(5 * time.Second)
-			// Retry
-			mgr.addressChan <- nil
+			// Retry with LB addr
+			mgr.addressChan <- addr
 			continue
 		}
 
-		mgr.log.Info("Successfully registered Proxy address " + ip)
+		mgr.log.Info("Successfully registered Proxy address " + addr)
 	}
 }
 
 func (mgr *Manager) updateProxyService(foundSvc *corev1.Service) error {
 	foundSvc.Spec.Ports = make([]corev1.ServicePort, 0)
-	for _, port := range mgr.cache {
-		foundSvc.Spec.Ports = append(foundSvc.Spec.Ports, generateServicePort(port.Port, port.Queue))
-	}
+	modifyServiceSpec(foundSvc, mgr.cache)
 
 	// Cannot update service to have 0 ports, delete it
 	if len(foundSvc.Spec.Ports) == 0 {
