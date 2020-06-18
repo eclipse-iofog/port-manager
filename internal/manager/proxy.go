@@ -223,4 +223,5 @@ func modifyServiceSpec(svc *corev1.Service, ports portMap) {
 			}
 		}
 	}
+	svc.ObjectMeta.Annotations[tcpAnnotationKey] = tcpAnnotation
 }
