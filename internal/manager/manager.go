@@ -82,7 +82,7 @@ func New(opt Options) (*Manager, error) {
 	}
 	mgr := &Manager{
 		cache:       make(portMap),
-		log:         logf.Log.WithName(managerName),
+		log:         logf.Log.WithName(opt.ProxyName),
 		opt:         opt,
 		addressChan: make(chan string, 5),
 	}
