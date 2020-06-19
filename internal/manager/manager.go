@@ -40,7 +40,6 @@ const (
 	controllerPort        = 51121
 	managerName           = "port-manager"
 	pollInterval          = time.Second * 10
-	tcpAnnotationKey      = "iofog.org/tcp"
 )
 
 type portMap map[int]ioclient.PublicPort // Indexed by port
@@ -58,6 +57,8 @@ type Manager struct {
 	proxyImage     string
 	routerAddress  string
 	addressChan    chan string
+	protocolFilter string
+	proxyName      string
 }
 
 type Options struct {
@@ -69,6 +70,16 @@ type Options struct {
 	ProxyExternalAddress string
 	RouterAddress        string
 	Config               *rest.Config
+}
+
+func NewFiltered(opt Options, protocol string) (*Manager, error) {
+	mgr, err := New(opt)
+	if err != nil {
+		return nil, err
+	}
+	mgr.protocolFilter = strings.ToUpper(protocol)
+	mgr.proxyName = strings.ToLower(protocol) + "-proxy"
+	return mgr, nil
 }
 
 func New(opt Options) (*Manager, error) {
@@ -83,6 +94,7 @@ func New(opt Options) (*Manager, error) {
 		log:         logf.Log.WithName(managerName),
 		opt:         opt,
 		addressChan: make(chan string, 5),
+		proxyName:   "http-proxy", // TODO: Change default name (e.g. iofogctl tests rely on svc name)
 	}
 	return mgr, mgr.init()
 }
@@ -144,7 +156,7 @@ func (mgr *Manager) init() (err error) {
 	// Check if Proxy Service exists
 	svc := corev1.Service{}
 	proxyKey := k8sclient.ObjectKey{
-		Name:      proxyName,
+		Name:      mgr.proxyName,
 		Namespace: mgr.opt.Namespace,
 	}
 	if svcErr := mgr.k8sClient.Get(context.TODO(), proxyKey, &svc); svcErr == nil {
@@ -158,17 +170,18 @@ func (mgr *Manager) init() (err error) {
 // Main loop of manager
 // Query ioFog Controller REST API and compare against cache
 // Make updates to K8s resources as required
-func (mgr *Manager) Run() (err error) {
+func (mgr *Manager) Run() {
 	// Initialize cache based on K8s API
 	if err := mgr.generateCache(); err != nil {
-		return err
+		mgr.log.Error(err, "")
+		time.Sleep(5 * time.Second)
 	}
 
 	// Watch Controller API
 	for {
 		time.Sleep(pollInterval)
 		if err := mgr.run(); err != nil {
-			return err
+			mgr.log.Error(err, "")
 		}
 	}
 }
@@ -185,7 +198,7 @@ func (mgr *Manager) generateCache() error {
 
 	// Get deployment
 	proxyKey := k8sclient.ObjectKey{
-		Name:      proxyName,
+		Name:      mgr.proxyName,
 		Namespace: mgr.opt.Namespace,
 	}
 	foundDep := appsv1.Deployment{}
@@ -223,10 +236,22 @@ func (mgr *Manager) generateCache() error {
 func (mgr *Manager) run() error {
 	cacheReconciled := false
 
-	// Check ports
-	backendPorts, err := mgr.ioClient.GetAllMicroservicePublicPorts()
+	// Get public ports from Controller
+	allBackendPorts, err := mgr.ioClient.GetAllMicroservicePublicPorts()
 	if err != nil {
 		return err
+	}
+
+	var backendPorts []ioclient.MicroservicePublicPort
+	// Filter ports based on protocol
+	if mgr.protocolFilter == "" {
+		backendPorts = allBackendPorts
+	} else {
+		for _, port := range allBackendPorts {
+			if strings.ToUpper(port.PublicPort.Protocol) == mgr.protocolFilter {
+				backendPorts = append(backendPorts, port)
+			}
+		}
 	}
 
 	// Update Proxy config if new ports are created or queues changed
@@ -278,11 +303,11 @@ func (mgr *Manager) run() error {
 func (mgr *Manager) deleteProxyDeployment() error {
 	// Dep
 	key := k8sclient.ObjectKey{
-		Name:      proxyName,
+		Name:      mgr.proxyName,
 		Namespace: mgr.opt.Namespace,
 	}
 	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
-		Name:      proxyName,
+		Name:      mgr.proxyName,
 		Namespace: mgr.opt.Namespace,
 	}}
 	if err := mgr.delete(key, dep); err != nil {
@@ -294,11 +319,11 @@ func (mgr *Manager) deleteProxyDeployment() error {
 // Delete K8s resources for an HTTP Proxy created for a Microservice
 func (mgr *Manager) deleteProxyService() error {
 	proxyKey := k8sclient.ObjectKey{
-		Name:      proxyName,
+		Name:      mgr.proxyName,
 		Namespace: mgr.opt.Namespace,
 	}
 	meta := metav1.ObjectMeta{
-		Name:      proxyName,
+		Name:      mgr.proxyName,
 		Namespace: mgr.opt.Namespace,
 	}
 	svc := &corev1.Service{ObjectMeta: meta}
@@ -312,7 +337,7 @@ func (mgr *Manager) deleteProxyService() error {
 func (mgr *Manager) updateProxy() error {
 	// Key to check resources don't already exist
 	proxyKey := k8sclient.ObjectKey{
-		Name:      proxyName,
+		Name:      mgr.proxyName,
 		Namespace: mgr.opt.Namespace,
 	}
 
@@ -328,7 +353,7 @@ func (mgr *Manager) updateProxy() error {
 			return err
 		}
 		// Create new deployment
-		dep := newProxyDeployment(mgr.opt.Namespace, mgr.opt.ProxyImage, 1, createProxyConfig(mgr.cache), mgr.opt.RouterAddress)
+		dep := newProxyDeployment(mgr.opt.Namespace, mgr.proxyName, mgr.opt.ProxyImage, 1, createProxyConfig(mgr.cache), mgr.opt.RouterAddress)
 		mgr.setOwnerReference(dep)
 		if err := mgr.k8sClient.Create(context.TODO(), dep); err != nil {
 			return err
@@ -347,7 +372,7 @@ func (mgr *Manager) updateProxy() error {
 			return err
 		}
 		// Create new service
-		svc := newProxyService(mgr.opt.Namespace, mgr.cache, mgr.opt.ProxyServiceType)
+		svc := newProxyService(mgr.opt.Namespace, mgr.proxyName, mgr.cache, mgr.opt.ProxyServiceType)
 		mgr.setOwnerReference(svc)
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
 			return err
@@ -369,7 +394,7 @@ func (mgr *Manager) registerProxyAddress() {
 
 		if addr == "" {
 			// Wait for LB Service
-			addr, err = mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, proxyName, timeout)
+			addr, err = mgr.waitClient.WaitForLoadBalancer(mgr.opt.Namespace, mgr.proxyName, timeout)
 			if err != nil {
 				mgr.log.Error(err, "Failed to find IP address of Proxy Service")
 				// Wait
@@ -396,7 +421,6 @@ func (mgr *Manager) registerProxyAddress() {
 }
 
 func (mgr *Manager) updateProxyService(foundSvc *corev1.Service) error {
-	foundSvc.Spec.Ports = make([]corev1.ServicePort, 0)
 	modifyServiceSpec(foundSvc, mgr.cache)
 
 	// Cannot update service to have 0 ports, delete it
