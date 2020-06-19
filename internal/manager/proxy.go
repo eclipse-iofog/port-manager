@@ -27,10 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-const (
-	proxyName = "http-proxy"
-)
-
 func getProxyContainerArgs(config string) []string {
 	return []string{
 		"node",
@@ -38,13 +34,13 @@ func getProxyContainerArgs(config string) []string {
 		config,
 	}
 }
-func newProxyDeployment(namespace, image string, replicas int32, config, routerHost string) *appsv1.Deployment {
+func newProxyDeployment(namespace, name, image string, replicas int32, config, routerHost string) *appsv1.Deployment {
 	labels := map[string]string{
-		"name": proxyName,
+		"name": name,
 	}
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      proxyName,
+			Name:      name,
 			Namespace: namespace,
 			Labels:    labels,
 		},
@@ -86,13 +82,13 @@ func getRouterConfig(routerHost string) string {
 	return strings.Replace(config, "<ROUTER>", routerHost, 1)
 }
 
-func newProxyService(namespace string, ports portMap, svcType string) *corev1.Service {
+func newProxyService(namespace, name string, ports portMap, svcType string) *corev1.Service {
 	labels := map[string]string{
-		"name": proxyName,
+		"name": name,
 	}
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      proxyName,
+			Name:      name,
 			Namespace: namespace,
 			Labels:    labels,
 		},
@@ -211,17 +207,8 @@ func getTrafficPolicy(serviceType string) corev1.ServiceExternalTrafficPolicyTyp
 }
 
 func modifyServiceSpec(svc *corev1.Service, ports portMap) {
-	tcpAnnotation := svc.ObjectMeta.Annotations[tcpAnnotationKey]
+	svc.Spec.Ports = make([]corev1.ServicePort, 0)
 	for _, port := range ports {
-		// Add port to svc spec
 		svc.Spec.Ports = append(svc.Spec.Ports, generateServicePort(port.Port, port.Queue))
-		// Add tcp annotation
-		if port.Protocol == "tcp" || port.Protocol == "TCP" {
-			portString := strconv.Itoa(port.Port)
-			if !strings.Contains(tcpAnnotation, portString) {
-				tcpAnnotation = fmt.Sprintf("%s %s", tcpAnnotation, portString)
-			}
-		}
 	}
-	svc.ObjectMeta.Annotations[tcpAnnotationKey] = tcpAnnotation
 }

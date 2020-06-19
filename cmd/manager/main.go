@@ -73,6 +73,30 @@ func generateManagerOptions(namespace string, cfg *rest.Config) manager.Options 
 	}
 }
 
+func generateManagers(opt manager.Options) (mgrs []*manager.Manager) {
+	// No external address provided, Manager will create Proxy LoadBalancer and single Deployment
+	if opt.ProxyExternalAddress == "" {
+		mgr, err := manager.New(opt)
+		handleErr(err, "")
+		mgrs = append(mgrs, mgr)
+	} else {
+		// External address provided, Manager will create ClusterIP and Deployment for each protocol
+		for _, protocol := range []string{"http", "tcp"} {
+			mgr, err := manager.NewFiltered(opt, protocol)
+			handleErr(err, "")
+			mgrs = append(mgrs, mgr)
+		}
+	}
+	return
+}
+
+func handleErr(err error, msg string) {
+	if err != nil {
+		log.Error(err, msg)
+		os.Exit(1)
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -86,53 +110,37 @@ func main() {
 
 	// Get namespace from environment variable
 	namespace, err := k8sutil.GetWatchNamespace()
-	if err != nil {
-		log.Error(err, "Failed to get watch namespace")
-		os.Exit(1)
-	}
+	handleErr(err, "Failed to get watch namespace")
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
+	handleErr(err, "")
 
 	// Become the leader before proceeding
 	err = leader.Become(context.TODO(), "iofog-port-manager-lock")
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
+	handleErr(err, "")
 
 	// Create file for readiness probe
 	r := ready.NewFileReady()
 	err = r.Set()
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
+	handleErr(err, "")
 	defer func() {
-		if err = r.Unset(); err != nil {
-			log.Error(err, "")
-			os.Exit(1)
-		}
+		err = r.Unset()
+		handleErr(err, "")
 	}()
 
 	// Generate options for manager instance
 	opt := generateManagerOptions(namespace, cfg)
 
-	// Instantiate Manager
-	mgr, err := manager.New(opt)
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
+	// Instantiate Manager(s)
+	mgrs := generateManagers(opt)
+
+	// Run Managers
+	for _, mgr := range mgrs {
+		go mgr.Run()
 	}
 
-	// Run loop
-	for {
-		if err = mgr.Run(); err != nil {
-			log.Error(err, "")
-		}
+	// Wait forever
+	switch {
 	}
 }
