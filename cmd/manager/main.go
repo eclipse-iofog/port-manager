@@ -141,6 +141,6 @@ func main() {
 	}
 
 	// Wait forever
-	switch {
+	select {
 	}
 }
