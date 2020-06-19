@@ -203,7 +203,7 @@ func getTrafficPolicy(serviceType string) corev1.ServiceExternalTrafficPolicyTyp
 	if serviceType == string(corev1.ServiceTypeLoadBalancer) {
 		return corev1.ServiceExternalTrafficPolicyTypeLocal
 	}
-	return corev1.ServiceExternalTrafficPolicyTypeCluster
+	return ""
 }
 
 func modifyServiceSpec(svc *corev1.Service, ports portMap) {
