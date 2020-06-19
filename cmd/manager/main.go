@@ -31,8 +31,8 @@ const (
 	userEmailEnv        = "IOFOG_USER_EMAIL"
 	userPassEnv         = "IOFOG_USER_PASS"
 	proxyImageEnv       = "PROXY_IMAGE"
-	proxyAddressEnv     = "PROXY_ADDRESS"
-	proxyServiceTypeEnv = "PROXY_SERVICE_TYPE"
+	httpProxyAddressEnv = "HTTP_PROXY_ADDRESS"
+	tcpProxyAddressEnv  = "TCP_PROXY_ADDRESS"
 	routerAddressEnv    = "ROUTER_ADDRESS"
 )
 
@@ -42,14 +42,14 @@ type env struct {
 	value    string
 }
 
-func generateManagerOptions(namespace string, cfg *rest.Config) manager.Options {
+func generateManagerOptions(namespace string, cfg *rest.Config) (opts []manager.Options) {
 	envs := map[string]env{
 		userEmailEnv:        {key: userEmailEnv},
 		userPassEnv:         {key: userPassEnv},
 		routerAddressEnv:    {key: routerAddressEnv},
 		proxyImageEnv:       {key: proxyImageEnv},
-		proxyServiceTypeEnv: {key: proxyServiceTypeEnv},
-		proxyAddressEnv:     {key: proxyAddressEnv, optional: true},
+		httpProxyAddressEnv: {key: httpProxyAddressEnv, optional: true},
+		tcpProxyAddressEnv:  {key: tcpProxyAddressEnv, optional: true},
 	}
 	// Read env vars
 	for _, env := range envs {
@@ -61,31 +61,43 @@ func generateManagerOptions(namespace string, cfg *rest.Config) manager.Options 
 		// Store result for later
 		envs[env.key] = env
 	}
-	return manager.Options{
+
+	opt := manager.Options{
 		Namespace:            namespace,
 		UserEmail:            envs[userEmailEnv].value,
 		UserPass:             envs[userPassEnv].value,
 		ProxyImage:           envs[proxyImageEnv].value,
-		ProxyServiceType:     envs[proxyServiceTypeEnv].value,
-		ProxyExternalAddress: envs[proxyAddressEnv].value,
+		ProxyServiceType:     "LoadBalancer",
+		ProxyExternalAddress: "",
+		ProtocolFilter:       "",
+		ProxyName:            "http-proxy", // TODO: Fix this default, e.g. iofogctl tests get svc name
 		RouterAddress:        envs[routerAddressEnv].value,
 		Config:               cfg,
 	}
+	opts = append(opts, opt)
+	if envs[httpProxyAddressEnv].value != "" && envs[tcpProxyAddressEnv].value != "" {
+		// Update first opt
+		opts[0].ProxyServiceType = "ClusterIP"
+		opts[0].ProtocolFilter = "http"
+		opts[0].ProxyName = "http-proxy"
+		opts[0].ProxyExternalAddress = envs[httpProxyAddressEnv].value
+		// Create second opt
+		opt.ProxyServiceType = "ClusterIP"
+		opt.ProtocolFilter = "tcp"
+		opt.ProxyName = "tcp-proxy"
+		opt.ProxyExternalAddress = envs[tcpProxyAddressEnv].value
+		opts = append(opts, opt)
+	}
+	return
 }
 
-func generateManagers(opt manager.Options) (mgrs []*manager.Manager) {
+func generateManagers(namespace string, cfg *rest.Config) (mgrs []*manager.Manager) {
+	opts := generateManagerOptions(namespace, cfg)
 	// No external address provided, Manager will create Proxy LoadBalancer and single Deployment
-	if opt.ProxyExternalAddress == "" {
-		mgr, err := manager.New(opt)
+	for idx := range opts {
+		mgr, err := manager.New(opts[idx])
 		handleErr(err, "")
 		mgrs = append(mgrs, mgr)
-	} else {
-		// External address provided, Manager will create ClusterIP and Deployment for each protocol
-		for _, protocol := range []string{"http", "tcp"} {
-			mgr, err := manager.NewFiltered(opt, protocol)
-			handleErr(err, "")
-			mgrs = append(mgrs, mgr)
-		}
 	}
 	return
 }
@@ -129,11 +141,8 @@ func main() {
 		handleErr(err, "")
 	}()
 
-	// Generate options for manager instance
-	opt := generateManagerOptions(namespace, cfg)
-
 	// Instantiate Manager(s)
-	mgrs := generateManagers(opt)
+	mgrs := generateManagers(namespace, cfg)
 
 	// Run Managers
 	for _, mgr := range mgrs {
@@ -141,6 +150,5 @@ func main() {
 	}
 
 	// Wait forever
-	select {
-	}
+	select {}
 }
