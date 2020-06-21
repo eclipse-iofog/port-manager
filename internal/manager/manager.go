@@ -83,6 +83,7 @@ func New(opt Options) (*Manager, error) {
 		opt:         opt,
 		addressChan: make(chan string, 5),
 	}
+	mgr.opt.ProtocolFilter = strings.ToUpper(mgr.opt.ProtocolFilter)
 	return mgr, mgr.init()
 }
 
