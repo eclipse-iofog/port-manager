@@ -54,10 +54,7 @@ type Manager struct {
 	ioClient       *ioclient.Client
 	log            logr.Logger
 	owner          metav1.OwnerReference
-	proxyImage     string
-	routerAddress  string
 	addressChan    chan string
-	protocolFilter string
 }
 
 type Options struct {
@@ -234,11 +231,11 @@ func (mgr *Manager) run() error {
 
 	var backendPorts []ioclient.MicroservicePublicPort
 	// Filter ports based on protocol
-	if mgr.protocolFilter == "" {
+	if mgr.opt.ProtocolFilter == "" {
 		backendPorts = allBackendPorts
 	} else {
 		for _, port := range allBackendPorts {
-			if strings.ToUpper(port.PublicPort.Protocol) == mgr.protocolFilter {
+			if strings.ToUpper(port.PublicPort.Protocol) == mgr.opt.ProtocolFilter {
 				backendPorts = append(backendPorts, port)
 			}
 		}
