@@ -1,8 +1,17 @@
 # Changelog
 
-## [Unreleased]
+## [v2.0.0] - 2020-08-05
 
-## [v2.0.0-rc1] - 2020-04-29
+## Features
+
+* Add support for Ingress by creating ClusterIP Services
+
+## Bugs
+
+* Capitalization of Public Port protocol
+* Initialization of manager
+* ClusterIP Traffic policy
+* Typo in wait 
 
 ## [v2.0.0-beta3] - 2020-04-23
 
