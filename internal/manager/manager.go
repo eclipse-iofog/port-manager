@@ -15,7 +15,7 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -146,18 +146,13 @@ func (mgr *Manager) init() (err error) {
 	return
 }
 
-func (mgr *Manager) marshalCache() string {
-	cache, _ := json.Marshal(mgr.cache)
-	return string(cache)
-}
-
 // Main loop of manager
 // Query ioFog Controller REST API and compare against cache
 // Make updates to K8s resources as required
 func (mgr *Manager) Run() {
 	// Initialize cache based on K8s API
 	if err := mgr.generateCache(); err != nil {
-		mgr.log.Error(err, "")
+		mgr.log.Error(err, "Failed to generate cache")
 		time.Sleep(5 * time.Second)
 	}
 
@@ -165,7 +160,7 @@ func (mgr *Manager) Run() {
 	for {
 		time.Sleep(pkg.pollInterval)
 		if err := mgr.run(); err != nil {
-			mgr.log.Error(err, "")
+			mgr.log.Error(err, "Failed in watch loop")
 		}
 	}
 }
@@ -208,7 +203,7 @@ func (mgr *Manager) generateCache() error {
 		mgr.cache[port.Port] = *port
 	}
 
-	mgr.log.Info("Generated cache", "cache", mgr.marshalCache())
+	mgr.log.Info("Generated cache", "cache", mgr.cache)
 	return nil
 }
 
@@ -270,7 +265,7 @@ func (mgr *Manager) run() error {
 
 	// Update K8s resources
 	if cacheReconciled {
-		mgr.log.Info("Reconciled cache", "cache", mgr.marshalCache())
+		mgr.log.Info("Reconciled cache", "cache", mgr.cache)
 		return mgr.updateProxy()
 	}
 
@@ -296,6 +291,7 @@ func (mgr *Manager) deleteProxyDeployment() error {
 
 // Delete K8s resources for an HTTP Proxy created for a Microservice
 func (mgr *Manager) deleteProxyService() error {
+	// Perform deletion
 	proxyKey := k8sclient.ObjectKey{
 		Name:      mgr.opt.ProxyName,
 		Namespace: mgr.opt.Namespace,
@@ -308,7 +304,20 @@ func (mgr *Manager) deleteProxyService() error {
 	if err := mgr.delete(proxyKey, svc); err != nil {
 		return err
 	}
-	return nil
+	// Wait for service to be gone
+	timeout := time.Second * 60
+	for start := time.Now(); time.Since(start) < timeout; {
+		if err := mgr.k8sClient.Get(context.Background(), proxyKey, svc); err != nil {
+			// Not found, deletion complete
+			if k8serrors.IsNotFound(err) {
+				return nil
+			}
+			// Another error occurred
+			return err
+		}
+		time.Sleep(time.Second * 2)
+	}
+	return errors.New("Timed out waiting for Proxy Service deletion")
 }
 
 // Create or update an HTTP Proxy instance for a Microservice
@@ -349,7 +358,7 @@ func (mgr *Manager) updateProxy() error {
 		if !k8serrors.IsNotFound(err) {
 			return err
 		}
-		// Create new service
+		// Create new service if ports exist
 		svc := newProxyService(mgr.opt.Namespace, mgr.opt.ProxyName, mgr.cache, mgr.opt.ProxyServiceType)
 		mgr.setOwnerReference(svc)
 		if err := mgr.k8sClient.Create(context.TODO(), svc); err != nil {
