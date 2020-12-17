@@ -35,8 +35,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
-type portMap map[int]ioclient.PublicPort // Indexed by port
-
 type Manager struct {
 	opt            Options
 	iofogUserEmail string
@@ -149,7 +147,7 @@ func (mgr *Manager) init() (err error) {
 }
 
 func (mgr *Manager) marshalCache() string {
-	cache, _ := json.MarshalIndent(mgr.cache, "", "\t")
+	cache, _ := json.Marshal(mgr.cache)
 	return string(cache)
 }
 

@@ -19,7 +19,7 @@ import (
 	"github.com/eclipse-iofog/port-manager/v2/internal/manager"
 )
 
-var log = logf.Log.WithName("port-manager")
+var log = logf.Log.WithName("initializer")
 
 func printVersion() {
 	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))

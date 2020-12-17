@@ -3,7 +3,7 @@ module github.com/eclipse-iofog/port-manager/v2
 go 1.12
 
 require (
-	github.com/eclipse-iofog/iofog-go-sdk/v2 v2.0.0-beta2.0.20200422223034-fc66de4f25ec
+	github.com/eclipse-iofog/iofog-go-sdk/v2 v2.0.0-beta3.0.20201217073159-da4de5477116
 	github.com/go-logr/logr v0.1.0
 	github.com/operator-framework/operator-sdk v0.10.0
 	k8s.io/api v0.17.3
@@ -14,6 +14,7 @@ require (
 
 // Pinned to kubernetes-1.13.4
 replace (
+	bitbucket.org/ww/goautoneg => github.com/munnerz/goautoneg v0.0.0-20120707110453-a547fc61f48d
 	k8s.io/api => k8s.io/api v0.0.0-20190222213804-5cb15d344471
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190228180357-d002e88f6236
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190221213512-86fb29eff628
