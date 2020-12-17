@@ -35,13 +35,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
-const (
-	controllerServiceName = "controller"
-	controllerPort        = 51121
-	managerName           = "port-manager"
-	pollInterval          = time.Second * 10
-)
-
 type portMap map[int]ioclient.PublicPort // Indexed by port
 
 type Manager struct {
@@ -92,7 +85,7 @@ func New(opt Options) (*Manager, error) {
 // Owner reference is required for automatic cleanup of K8s resources made by this runtime
 func (mgr *Manager) getOwnerReference() error {
 	objKey := k8sclient.ObjectKey{
-		Name:      managerName,
+		Name:      pkg.managerName,
 		Namespace: mgr.opt.Namespace,
 	}
 	dep := appsv1.Deployment{}
@@ -132,7 +125,7 @@ func (mgr *Manager) init() (err error) {
 			"credential": 10,
 		},
 	})
-	controllerEndpoint := fmt.Sprintf("%s.%s:%d", controllerServiceName, mgr.opt.Namespace, controllerPort)
+	controllerEndpoint := fmt.Sprintf("%s.%s:%d", pkg.controllerServiceName, mgr.opt.Namespace, pkg.controllerPort)
 	if mgr.ioClient, err = ioclient.NewAndLogin(ioclient.Options{Endpoint: controllerEndpoint}, mgr.opt.UserEmail, mgr.opt.UserPass); err != nil {
 		return
 	}
@@ -155,6 +148,11 @@ func (mgr *Manager) init() (err error) {
 	return
 }
 
+func (mgr *Manager) marshalCache() string {
+	cache, _ := json.MarshalIndent(mgr.cache, "", "\t")
+	return string(cache)
+}
+
 // Main loop of manager
 // Query ioFog Controller REST API and compare against cache
 // Make updates to K8s resources as required
@@ -167,16 +165,11 @@ func (mgr *Manager) Run() {
 
 	// Watch Controller API
 	for {
-		time.Sleep(pollInterval)
+		time.Sleep(pkg.pollInterval)
 		if err := mgr.run(); err != nil {
 			mgr.log.Error(err, "")
 		}
 	}
-}
-
-func (mgr *Manager) printCache() {
-	cache, _ := json.MarshalIndent(mgr.cache, "", "\t")
-	fmt.Println(string(cache))
 }
 
 func (mgr *Manager) generateCache() error {
@@ -195,7 +188,7 @@ func (mgr *Manager) generateCache() error {
 			return err
 		}
 		// Deployment not found, no ports open, nothing to cache
-		mgr.printCache()
+		mgr.log.Info("Initialized with empty cache")
 		return nil
 	}
 
@@ -217,7 +210,7 @@ func (mgr *Manager) generateCache() error {
 		mgr.cache[port.Port] = *port
 	}
 
-	fmt.Println(mgr.cache)
+	mgr.log.Info("Generated cache", "cache", mgr.marshalCache())
 	return nil
 }
 
@@ -279,8 +272,7 @@ func (mgr *Manager) run() error {
 
 	// Update K8s resources
 	if cacheReconciled {
-		fmt.Println("Cache reconciled:")
-		fmt.Println(mgr.cache)
+		mgr.log.Info("Reconciled cache", "cache", mgr.marshalCache())
 		return mgr.updateProxy()
 	}
 
