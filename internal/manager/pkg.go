@@ -14,8 +14,9 @@
 package manager
 
 import (
-	ioclient "github.com/eclipse-iofog/iofog-go-sdk/v2/pkg/client"
 	"time"
+
+	ioclient "github.com/eclipse-iofog/iofog-go-sdk/v2/pkg/client"
 )
 
 type portMap map[int]ioclient.PublicPort // Indexed by port

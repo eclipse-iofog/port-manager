@@ -88,14 +88,15 @@ func generateManagerOptions(namespace string, cfg *rest.Config) (opts []manager.
 		opt.ProxyExternalAddress = envs[tcpProxyAddressEnv].value
 		opts = append(opts, opt)
 	}
-	return
+	return opts
 }
 
 func generateManagers(namespace string, cfg *rest.Config) (mgrs []*manager.Manager) {
 	opts := generateManagerOptions(namespace, cfg)
 	// No external address provided, Manager will create Proxy LoadBalancer and single Deployment
 	for idx := range opts {
-		mgr, err := manager.New(opts[idx])
+		opt := &opts[idx]
+		mgr, err := manager.New(opt)
 		handleErr(err, "")
 		mgrs = append(mgrs, mgr)
 	}

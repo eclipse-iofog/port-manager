@@ -37,6 +37,10 @@ ifneq ($(IGNORE_GOLANG_VERSION_REQ), 1)
 endif
 	go build $(GOARGS) $(BUILD_PACKAGE)
 
+.PHONY: lint
+lint: fmt
+	@golangci-lint run --timeout 5m0s
+
 .PHONY: fmt
 fmt:
 	@gofmt -s -w $(GOFILES_NOVENDOR)

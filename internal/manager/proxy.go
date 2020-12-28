@@ -74,7 +74,7 @@ func newProxyDeployment(namespace, name, image string, replicas int32, config, r
 	}
 }
 
-func getRouterConfig(routerHost string) string {
+func getRouterConfig(routerHost string) string { // nolint:unused,deadcode
 	config := `{
 	"scheme": "amqp",
 	"host": "<ROUTER>"
@@ -137,17 +137,17 @@ func getProxyConfig(dep *appsv1.Deployment) (string, error) {
 func checkProxyDeployment(dep *appsv1.Deployment) error {
 	containers := dep.Spec.Template.Spec.Containers
 	if len(containers) == 0 {
-		return errors.New("Proxy Deployment has no containers")
+		return errors.New("proxy Deployment has no containers")
 	}
 	argCount := len(getProxyContainerArgs(""))
 	if len(containers[0].Args) != argCount {
-		return errors.New(fmt.Sprintf("Proxy Deployment argument length is not %d", argCount))
+		return fmt.Errorf("proxy Deployment argument length is not %d", argCount)
 	}
 	return nil
 }
 
 // Find all ports in config string
-func decodeConfig(config, startDelim, endDelim string) (ports map[int]bool, err error) {
+func decodeConfig(config, startDelim, endDelim string) (ports map[int]bool, err error) { // nolint:unused,deadcode
 	portStrings := between(config, startDelim, endDelim)
 	ports = make(map[int]bool)
 	for idx := range portStrings {

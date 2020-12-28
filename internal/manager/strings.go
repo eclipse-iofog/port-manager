@@ -19,7 +19,7 @@ import (
 )
 
 // Find all substrings between a and b until end
-func between(value string, a string, b string) (substrs []string) {
+func between(value, a, b string) (substrs []string) {
 	substrs = make([]string, 0)
 	iter := 0
 	for iter < len(value)+1 {
@@ -41,20 +41,12 @@ func between(value string, a string, b string) (substrs []string) {
 	return
 }
 
-func before(input string, substr string) string {
+func before(input, substr string) string {
 	pos := strings.Index(input, substr)
 	if pos == -1 {
 		return input
 	}
 	return input[0:pos]
-}
-
-func after(input string, substr string) string {
-	pos := strings.Index(input, substr)
-	if pos == -1 || pos >= len(input)-1 {
-		return ""
-	}
-	return input[pos+1:]
 }
 
 func decodeBase64(encoded string) (string, error) {
