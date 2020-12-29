@@ -36,16 +36,14 @@ import (
 )
 
 type Manager struct {
-	opt            Options
-	iofogUserEmail string
-	iofogUserPass  string
-	cache          portMap
-	k8sClient      k8sclient.Client
-	waitClient     *waitclient.Client
-	ioClient       *ioclient.Client
-	log            logr.Logger
-	owner          metav1.OwnerReference
-	addressChan    chan string
+	opt         *Options
+	cache       portMap
+	k8sClient   k8sclient.Client
+	waitClient  *waitclient.Client
+	ioClient    *ioclient.Client
+	log         logr.Logger
+	owner       metav1.OwnerReference
+	addressChan chan string
 }
 
 type Options struct {
@@ -61,7 +59,7 @@ type Options struct {
 	Config               *rest.Config
 }
 
-func New(opt Options) (*Manager, error) {
+func New(opt *Options) (*Manager, error) {
 	logf.SetLogger(logf.ZapLogger(false))
 
 	password, err := decodeBase64(opt.UserPass)
@@ -75,7 +73,9 @@ func New(opt Options) (*Manager, error) {
 		addressChan: make(chan string, 5),
 	}
 	mgr.opt.ProtocolFilter = strings.ToUpper(mgr.opt.ProtocolFilter)
-	return mgr, mgr.init()
+	err = mgr.init()
+
+	return mgr, err
 }
 
 // Query the K8s API Server for details of this pod's deployment
@@ -138,12 +138,17 @@ func (mgr *Manager) init() (err error) {
 		Name:      mgr.opt.ProxyName,
 		Namespace: mgr.opt.Namespace,
 	}
-	if svcErr := mgr.k8sClient.Get(context.TODO(), proxyKey, &svc); svcErr == nil {
-		// Register Service IP
-		mgr.addressChan <- mgr.opt.ProxyExternalAddress
+	// Check if service exists
+	if err := mgr.k8sClient.Get(context.TODO(), proxyKey, &svc); err != nil {
+		// Not found, no problem
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
-
-	return
+	// Service exists, register Service IP
+	mgr.addressChan <- mgr.opt.ProxyExternalAddress
+	return nil
 }
 
 // Main loop of manager
@@ -222,7 +227,7 @@ func (mgr *Manager) run() error {
 		backendPorts = allBackendPorts
 	} else {
 		for _, port := range allBackendPorts {
-			if strings.ToUpper(port.PublicPort.Protocol) == mgr.opt.ProtocolFilter {
+			if strings.EqualFold(port.PublicPort.Protocol, mgr.opt.ProtocolFilter) {
 				backendPorts = append(backendPorts, port)
 			}
 		}
@@ -274,16 +279,11 @@ func (mgr *Manager) run() error {
 
 // Delete K8s resources for an HTTP Proxy created for a Microservice
 func (mgr *Manager) deleteProxyDeployment() error {
-	// Dep
-	key := k8sclient.ObjectKey{
-		Name:      mgr.opt.ProxyName,
-		Namespace: mgr.opt.Namespace,
-	}
 	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
 		Name:      mgr.opt.ProxyName,
 		Namespace: mgr.opt.Namespace,
 	}}
-	if err := mgr.delete(key, dep); err != nil {
+	if err := mgr.delete(dep); err != nil {
 		return err
 	}
 	return nil
@@ -301,7 +301,7 @@ func (mgr *Manager) deleteProxyService() error {
 		Namespace: mgr.opt.Namespace,
 	}
 	svc := &corev1.Service{ObjectMeta: meta}
-	if err := mgr.delete(proxyKey, svc); err != nil {
+	if err := mgr.delete(svc); err != nil {
 		return err
 	}
 	// Wait for service to be gone
@@ -317,7 +317,7 @@ func (mgr *Manager) deleteProxyService() error {
 		}
 		time.Sleep(time.Second * 2)
 	}
-	return errors.New("Timed out waiting for Proxy Service deletion")
+	return errors.New("timed out waiting for Proxy Service deletion")
 }
 
 // Create or update an HTTP Proxy instance for a Microservice
@@ -429,7 +429,7 @@ func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment) error {
 	// Generate config
 	config := createProxyConfig(mgr.cache)
 
-	if len(config) == 0 {
+	if config == "" {
 		// Delete unneeded resource
 		return mgr.deleteProxyDeployment()
 	}
@@ -446,31 +446,12 @@ func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment) error {
 	return nil
 }
 
-func (mgr *Manager) delete(objKey k8sclient.ObjectKey, obj runtime.Object) error {
+func (mgr *Manager) delete(obj runtime.Object) error {
 	if err := mgr.k8sClient.Delete(context.Background(), obj); err != nil {
 		if !k8serrors.IsNotFound(err) {
 			return err
 		}
 		return err
-	}
-	return nil
-}
-
-func (mgr *Manager) createOrUpdate(objKey k8sclient.ObjectKey, obj runtime.Object) error {
-	found := obj.DeepCopyObject()
-	if err := mgr.k8sClient.Get(context.TODO(), objKey, found); err == nil {
-		// Resource found, update ports
-		if err := mgr.k8sClient.Update(context.TODO(), obj); err != nil {
-			return err
-		}
-	} else {
-		if !k8serrors.IsNotFound(err) {
-			return err
-		}
-		// Resource not found, create one
-		if err := mgr.k8sClient.Create(context.TODO(), obj); err != nil {
-			return err
-		}
 	}
 	return nil
 }
