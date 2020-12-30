@@ -1,8 +1,9 @@
 # cloud.google.com/go v0.37.2
 cloud.google.com/go/compute/metadata
-# github.com/eclipse-iofog/iofog-go-sdk/v2 v2.0.0-beta3.0.20201217073159-da4de5477116
+# github.com/eclipse-iofog/iofog-go-sdk/v2 v2.0.0-beta3.0.20201229204532-79a813505ed9
 github.com/eclipse-iofog/iofog-go-sdk/v2/pkg/client
 github.com/eclipse-iofog/iofog-go-sdk/v2/pkg/k8s
+github.com/eclipse-iofog/iofog-go-sdk/v2/pkg/util
 # github.com/go-logr/logr v0.1.0
 github.com/go-logr/logr
 # github.com/go-logr/zapr v0.1.1
