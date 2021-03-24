@@ -2,7 +2,7 @@ SHELL = /bin/bash
 OS = $(shell uname -s)
 
 # Project variables
-PACKAGE = github.com/eclipse-iofog/port-manager/v2
+PACKAGE = github.com/eclipse-iofog/port-manager/v3
 BINARY_NAME = port-manager
 IMAGE = iofog/port-manager
 
@@ -21,7 +21,7 @@ MINOR ?= $(shell cat version | grep MINOR | sed 's/MINOR=//g')
 PATCH ?= $(shell cat version | grep PATCH | sed 's/PATCH=//g')
 SUFFIX ?= $(shell cat version | grep SUFFIX | sed 's/SUFFIX=//g')
 VERSION = $(MAJOR).$(MINOR).$(PATCH)$(SUFFIX)
-GO_SDK_MODULE = iofog-go-sdk/v2@develop
+GO_SDK_MODULE = iofog-go-sdk/v3@develop
 
 .PHONY: clean
 clean: ## Clean the working area and the project
@@ -45,7 +45,7 @@ test:
 	set -o pipefail; go list -mod=vendor ./... | xargs -n1 go test -mod=vendor $(GOARGS) -v -parallel 1 2>&1 | tee test.txt
 
 .PHONY: modules
-modules: get vendor ## Get modules and vendor them
+modules: get ## Get modules
 
 .PHONY: get
 get: ## Pull modules
@@ -54,7 +54,7 @@ get: ## Pull modules
 	done
 
 .PHONY: vendor
-vendor: # Vendor all deps
+vendor: modules # Vendor all deps
 	@go mod vendor
 
 .PHONY: build-img

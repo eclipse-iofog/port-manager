@@ -16,7 +16,7 @@ package manager
 import (
 	"testing"
 
-	ioclient "github.com/eclipse-iofog/iofog-go-sdk/v2/pkg/client"
+	ioclient "github.com/eclipse-iofog/iofog-go-sdk/v3/pkg/client"
 )
 
 func TestProxyString(t *testing.T) {

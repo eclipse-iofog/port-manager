@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 
-	"github.com/eclipse-iofog/port-manager/v2/internal/manager"
+	"github.com/eclipse-iofog/port-manager/v3/internal/manager"
 )
 
 var log = logf.Log.WithName("initializer")

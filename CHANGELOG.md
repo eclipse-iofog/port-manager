@@ -3,6 +3,7 @@
 ## [v3.0.0-alpha1] - 24 March 2021
 
 * Standardize logging across whole manager package
+* Use go v1.15
 
 ## [v2.0.0] - 2020-08-05
 
