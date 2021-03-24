@@ -61,6 +61,21 @@ vendor: modules # Vendor all deps
 build-img:
 	docker build -t eclipse-iofog/port-manager:latest -f build/Dockerfile .
 
+golangci-lint: ## Install golangci
+ifeq (, $(shell which golangci-lint))
+	@{ \
+	set -e ;\
+	GOLANGCI_TMP_DIR=$$(mktemp -d) ;\
+	cd $$GOLANGCI_TMP_DIR ;\
+	go mod init tmp ;\
+	go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0 ;\
+	rm -rf $$GOLANGCI_TMP_DIR ;\
+	}
+GOLANGCI_LINT=$(GOBIN)/golangci-lint
+else
+GOLANGCI_LINT=$(shell which golangci-lint)
+endif
+
 .PHONY: list
 list: ## List all make targets
 	@$(MAKE) -pRrn : -f $(MAKEFILE_LIST) 2>/dev/null | awk -v RS= -F: '/^# File/,/^# Finished Make data base/ {if ($$1 !~ "^[#.]") {print $$1}}' | egrep -v -e '^[^[:alnum:]]' -e '^$@$$' | sort
