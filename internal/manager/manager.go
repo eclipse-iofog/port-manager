@@ -32,7 +32,8 @@ import (
 	waitclient "github.com/eclipse-iofog/iofog-go-sdk/v3/pkg/k8s"
 
 	"github.com/go-logr/logr"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 type Manager struct {
@@ -60,7 +61,7 @@ type Options struct {
 }
 
 func New(opt *Options) (*Manager, error) {
-	logf.SetLogger(logf.ZapLogger(false))
+	logf.SetLogger(zap.New())
 
 	password, err := decodeBase64(opt.UserPass)
 	if err == nil {
