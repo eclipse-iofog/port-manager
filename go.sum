@@ -149,6 +149,8 @@ github.com/eclipse-iofog/iofog-go-sdk/v3 v2.0.0-beta3.0.20210306092845-4d8568558
 github.com/eclipse-iofog/iofog-go-sdk/v3 v2.0.0-beta3.0.20210306092845-4d8568558b5d/go.mod h1:8QJJMbfavHHgZnj2gtwhdG/Y9vJ74XgA3uFdd5/2KuA=
 github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-20210315001729-4bfb68b2b2a6 h1:B7VhDmNmWTmlrTMJxmXhRVwsHUfScbJJytCZMTOeuLY=
 github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-20210315001729-4bfb68b2b2a6/go.mod h1:aauE9ce3SVr9mTkLTKpEblKHjN4xBPjQqs5WGt5V3WA=
+github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-alpha1 h1:Ef4HGOeSkkQp7DdujrTmIk2p05Efw1DHN99enouL9eU=
+github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-alpha1/go.mod h1:aauE9ce3SVr9mTkLTKpEblKHjN4xBPjQqs5WGt5V3WA=
 github.com/eclipse-iofog/port-manager v0.0.0-20200311052040-7455d4fd2e4f h1:XmTiVnGUJhXHpBA8khDmYKKSx3ANnTcGQxTeNGUBJGQ=
 github.com/elazarl/go-bindata-assetfs v1.0.0/go.mod h1:v+YaWX3bdea5J/mo8dSETolEo7R71Vk1u8bnjau5yw4=
 github.com/elazarl/goproxy v0.0.0-20170405201442-c4fc26588b6e/go.mod h1:/Zj4wYkgs4iZTTu3o/KG3Itv/qCCa8VVMlb3i9OVuzc=
