@@ -1,6 +1,6 @@
 # Changelog
 
-## [v2.0.1] - Unreleased
+## [v3.0.0-alpha1] - 24 March 2021
 
 * Standardize logging across whole manager package
 
