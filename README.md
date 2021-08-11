@@ -1,6 +1,6 @@
 # ioFog Port Manager
 
-Port Manager is a component of the ioFog Kubernetes Control Plane. It is responsible for managing HTTP Proxy instances to satisfy requirements specified by Public Ports created through the ioFog Controller API.
+Port Manager is a component of the ioFog Kubernetes Control Plane. It is responsible for managing HTTP and TCP Proxy deployments and services to satisfy requirements specified by Public Ports created through the ioFog Controller API.
 
 Port Manager is deployed automatically when using iofogctl >= 2.0.0.
 
