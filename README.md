@@ -6,7 +6,7 @@ Port Manager is deployed automatically when using iofogctl >= 2.0.0.
 
 ## Build from Source
 
-Go 1.15+ is a prerequisite.
+Go 1.16+ is a prerequisite.
 
 See all `make` commands by running:
 ```

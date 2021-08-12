@@ -1,9 +1,9 @@
 module github.com/eclipse-iofog/port-manager/v3
 
-go 1.15
+go 1.16
 
 require (
-	github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-20210315001729-4bfb68b2b2a6
+	github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-beta1
 	github.com/go-logr/logr v0.3.0
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/googleapis/gnostic v0.4.1 // indirect
@@ -23,6 +23,6 @@ replace (
 	// For sigs.k8s.io/controller-runtime v0.6.4
 	github.com/go-logr/logr => github.com/go-logr/logr v0.3.0
 	github.com/go-logr/zapr => github.com/go-logr/zapr v0.3.0
-	k8s.io/client-go => k8s.io/client-go v0.19.4
 	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.4.1
+	k8s.io/client-go => k8s.io/client-go v0.19.4
 )
