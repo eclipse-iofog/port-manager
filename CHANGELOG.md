@@ -1,5 +1,10 @@
 # Changelog
 
+## [v3.0.0-beta1] - 13 August 2021
+
+* Update go-sdk w/ base URL changes
+* Use go v1.16
+
 ## [v3.0.0-alpha1] - 24 March 2021
 
 * Standardize logging across whole manager package
