@@ -125,7 +125,7 @@ func (mgr *Manager) init() (err error) {
 			"credential": 10,
 		},
 	})
-	baseURLStr := fmt.Sprintf("%s.%s:%d/api/v3", pkg.controllerServiceName, mgr.opt.Namespace, pkg.controllerPort)
+	baseURLStr := fmt.Sprintf("http://%s.%s:%d/api/v3", pkg.controllerServiceName, mgr.opt.Namespace, pkg.controllerPort)
 	baseURL, err := url.Parse(baseURLStr)
 	if err != nil {
 		return fmt.Errorf("could not parse Controller URL %s: %s", baseURLStr, err.Error())
