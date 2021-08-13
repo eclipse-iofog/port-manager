@@ -10,9 +10,10 @@ trigger:
       exclude:
       - README.md
       - CHANGELOG.md
+      - LICENSE
 
 variables:
-  GOROOT: '/usr/local/go1.15'
+  GOROOT: '/usr/local/go1.16'
   GOPATH: '/tmp/go'
   GOBIN:  '$(GOPATH)/bin'
   repository: 'focal-freedom-236620/port-manager'
@@ -37,24 +38,17 @@ jobs:
 
   - task: GoTool@0
     inputs:
-      version: '1.15'
+      version: '1.16'
       goPath: $(GOPATH)
       goBin: $(GOBIN)
     displayName: 'Install Golang'
 
-  - script: |
-      set -e
-      . version
-      VERS=$MAJOR.$MINOR.$PATCH$SUFFIX
+  - bash: |
+      VERS=$(echo $(commit) | cut -c1-20)
       if [[ $(ref) == refs/tags* ]]; then
-        TAG=$(echo $(ref) | sed "s|refs/tags/v||g")
-        if [[ $TAG != $VERS ]]; then
-          echo 'Version file does not match git tag'
-          exit 1
-        fi
+        VERS=$(echo $(ref) | sed "s|refs/tags/v||g")
       fi
       echo "##vso[task.setvariable variable=version]$VERS"
-      echo $(version)
     displayName: 'Set version variable'
 
   - script: |

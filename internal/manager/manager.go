@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -124,8 +125,12 @@ func (mgr *Manager) init() (err error) {
 			"credential": 10,
 		},
 	})
-	controllerEndpoint := fmt.Sprintf("%s.%s:%d", pkg.controllerServiceName, mgr.opt.Namespace, pkg.controllerPort)
-	if mgr.ioClient, err = ioclient.NewAndLogin(ioclient.Options{Endpoint: controllerEndpoint}, mgr.opt.UserEmail, mgr.opt.UserPass); err != nil {
+	baseURLStr := fmt.Sprintf("http://%s.%s:%d/api/v3", pkg.controllerServiceName, mgr.opt.Namespace, pkg.controllerPort)
+	baseURL, err := url.Parse(baseURLStr)
+	if err != nil {
+		return fmt.Errorf("could not parse Controller URL %s: %s", baseURLStr, err.Error())
+	}
+	if mgr.ioClient, err = ioclient.NewAndLogin(ioclient.Options{BaseURL: baseURL}, mgr.opt.UserEmail, mgr.opt.UserPass); err != nil {
 		return
 	}
 	mgr.log.Info("Logged into Controller API")

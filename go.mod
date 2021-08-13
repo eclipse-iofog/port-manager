@@ -1,9 +1,9 @@
 module github.com/eclipse-iofog/port-manager/v3
 
-go 1.15
+go 1.16
 
 require (
-	github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-alpha1
+	github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-beta1
 	github.com/go-logr/logr v0.3.0
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/googleapis/gnostic v0.4.1 // indirect

@@ -2,7 +2,7 @@
 cloud.google.com/go/compute/metadata
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-alpha1
+# github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-beta1
 ## explicit
 github.com/eclipse-iofog/iofog-go-sdk/v3/pkg/client
 github.com/eclipse-iofog/iofog-go-sdk/v3/pkg/k8s

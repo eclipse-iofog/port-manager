@@ -16,12 +16,7 @@ endif
 
 GOFILES_NOVENDOR = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
-MAJOR ?= $(shell cat version | grep MAJOR | sed 's/MAJOR=//g')
-MINOR ?= $(shell cat version | grep MINOR | sed 's/MINOR=//g')
-PATCH ?= $(shell cat version | grep PATCH | sed 's/PATCH=//g')
-SUFFIX ?= $(shell cat version | grep SUFFIX | sed 's/SUFFIX=//g')
-VERSION = $(MAJOR).$(MINOR).$(PATCH)$(SUFFIX)
-GO_SDK_MODULE = iofog-go-sdk/v3@v3.0.0-alpha1
+GO_SDK_MODULE = iofog-go-sdk/v3@v3.0.0-beta1
 
 .PHONY: clean
 clean: ## Clean the working area and the project
