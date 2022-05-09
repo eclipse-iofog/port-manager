@@ -1,6 +1,6 @@
 # Changelog
 
-## [v3.0.0] - 
+## [v3.0.0] - 9 May 2022
 
 * Update go-sdk to 3.0.0
 * Use go v1.17
