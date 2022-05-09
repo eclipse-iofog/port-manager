@@ -16,7 +16,7 @@ endif
 
 GOFILES_NOVENDOR = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
-GO_SDK_MODULE = iofog-go-sdk/v3@v3.0.0-beta1
+GO_SDK_MODULE = iofog-go-sdk/v3@v3.0.0
 
 .PHONY: clean
 clean: ## Clean the working area and the project

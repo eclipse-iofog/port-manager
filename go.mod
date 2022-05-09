@@ -3,14 +3,10 @@ module github.com/eclipse-iofog/port-manager/v3
 go 1.16
 
 require (
-	github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0-beta1
+	github.com/eclipse-iofog/iofog-go-sdk/v3 v3.0.0
 	github.com/go-logr/logr v0.3.0
-	github.com/gogo/protobuf v1.3.1 // indirect
-	github.com/googleapis/gnostic v0.4.1 // indirect
-	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/operator-framework/operator-sdk v0.10.0
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
-	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	k8s.io/api v0.19.4
 	k8s.io/apimachinery v0.19.4
 	k8s.io/client-go v11.0.0+incompatible
