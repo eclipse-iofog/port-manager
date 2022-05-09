@@ -13,7 +13,7 @@ trigger:
       - LICENSE
 
 variables:
-  GOROOT: '/usr/local/go1.16'
+  GOROOT: '/usr/local/go1.17.9'
   GOPATH: '/tmp/go'
   GOBIN:  '$(GOPATH)/bin'
   repository: 'focal-freedom-236620/port-manager'
@@ -38,7 +38,7 @@ jobs:
 
   - task: GoTool@0
     inputs:
-      version: '1.16'
+      version: '1.17.9'
       goPath: $(GOPATH)
       goBin: $(GOBIN)
     displayName: 'Install Golang'
