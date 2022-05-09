@@ -25,7 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -93,8 +92,8 @@ func (mgr *Manager) getOwnerReference() error {
 		return err
 	}
 	mgr.owner = metav1.OwnerReference{
-		APIVersion: "extensions/v1beta1",
-		Kind:       "Deployment",
+		APIVersion: dep.APIVersion,
+		Kind:       dep.Kind,
 		Name:       dep.Name,
 		UID:        dep.UID,
 	}
@@ -452,7 +451,7 @@ func (mgr *Manager) updateProxyDeployment(foundDep *appsv1.Deployment) error {
 	return nil
 }
 
-func (mgr *Manager) delete(obj runtime.Object) error {
+func (mgr *Manager) delete(obj k8sclient.Object) error {
 	if err := mgr.k8sClient.Delete(context.Background(), obj); err != nil {
 		if !k8serrors.IsNotFound(err) {
 			return err

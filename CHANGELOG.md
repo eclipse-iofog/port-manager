@@ -1,5 +1,11 @@
 # Changelog
 
+## [v3.0.0] - 9 May 2022
+
+* Update go-sdk to 3.0.0
+* Use go v1.17
+* Remove pseudo-operator logic
+
 ## [v3.0.0-beta1] - 13 August 2021
 
 * Update go-sdk w/ base URL changes
