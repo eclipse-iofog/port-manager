@@ -1,32 +1,17 @@
 package main
 
 import (
-	"context"
-	"flag"
-	"fmt"
 	"os"
-	"runtime"
 
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
-	"github.com/operator-framework/operator-sdk/pkg/leader"
-	"github.com/operator-framework/operator-sdk/pkg/ready"
-	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/eclipse-iofog/port-manager/v3/internal/manager"
 )
 
 var log = zap.New()
-
-func printVersion() {
-	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
-	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
-	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
-}
 
 const (
 	userEmailEnv        = "IOFOG_USER_EMAIL"
@@ -111,36 +96,22 @@ func handleErr(err error, msg string) {
 	}
 }
 
+// getWatchNamespace returns the Namespace the operator should be watching for changes
+func getWatchNamespace() (ns string) {
+	// WatchNamespaceEnvVar is the constant for env variable WATCH_NAMESPACE
+	// which specifies the Namespace to watch.
+	// An empty value means the operator is running with cluster scope.
+	ns, _ = os.LookupEnv("WATCH_NAMESPACE")
+	return
+}
+
 func main() {
-	flag.Parse()
-
-	logf.SetLogger(zap.New())
-
-	printVersion()
-
-	// Get namespace from environment variable
-	namespace, err := k8sutil.GetWatchNamespace()
-	handleErr(err, "Failed to get watch namespace")
-
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	handleErr(err, "")
 
-	// Become the leader before proceeding
-	err = leader.Become(context.TODO(), "iofog-port-manager-lock")
-	handleErr(err, "")
-
-	// Create file for readiness probe
-	r := ready.NewFileReady()
-	err = r.Set()
-	handleErr(err, "")
-	defer func() {
-		err = r.Unset()
-		handleErr(err, "")
-	}()
-
 	// Instantiate Manager(s)
-	mgrs := generateManagers(namespace, cfg)
+	mgrs := generateManagers(getWatchNamespace(), cfg)
 
 	// Run Managers
 	for _, mgr := range mgrs {

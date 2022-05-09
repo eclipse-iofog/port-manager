@@ -4,6 +4,8 @@ Port Manager is a component of the ioFog Kubernetes Control Plane. It is respons
 
 Port Manager is deployed automatically when using iofogctl >= 2.0.0.
 
+**Only one instance of the port manager should run per namespace**
+
 ## Build from Source
 
 Go 1.16+ is a prerequisite.
