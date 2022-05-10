@@ -92,8 +92,8 @@ func (mgr *Manager) getOwnerReference() error {
 		return err
 	}
 	mgr.owner = metav1.OwnerReference{
-		APIVersion: dep.APIVersion,
-		Kind:       dep.Kind,
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
 		Name:       dep.Name,
 		UID:        dep.UID,
 	}

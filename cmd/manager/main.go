@@ -118,6 +118,14 @@ func main() {
 		go mgr.Run()
 	}
 
+	// Set ready
+	readyPath := "/tmp/operator-sdk-ready"
+	if _, err := os.Stat(readyPath); os.IsNotExist(err) {
+		file, err := os.Create(readyPath)
+		handleErr(err, "Failed to create ready file")
+		defer file.Close()
+	}
+
 	// Wait forever
 	select {}
 }
