@@ -25,13 +25,13 @@ env:
   GKE_ZONE: 'us-central1-a'
 
 jobs:
-  Tests:
+  Port_Manager:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
       id-token: 'write'
       packages: 'write'
-    name: Tests
+    name: Port_Manager
     steps:
     - uses: actions/checkout@v3
       with:
