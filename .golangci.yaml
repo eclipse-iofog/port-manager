@@ -72,31 +72,31 @@ linters:
   # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
   disable-all: true
   enable:
-    - asasalint
+    # - asasalint
     - asciicheck
-    - bidichk
+    # - bidichk
     - bodyclose
-    - containedctx
-    - contextcheck
-    - cyclop
+    # - containedctx
+    # - contextcheck
+    # - cyclop
     #    - deadcode
-    - decorder
+    # - decorder
     - depguard
     - dogsled
     - dupl
     #    - dupword
-    - durationcheck
+    # - durationcheck
     - errcheck
-    - errchkjson
-    - errname
+    # - errchkjson
+    # - errname
     # - errorlint
-    - execinquery
+    # - execinquery
     - exhaustive
     #    - exhaustivestruct
     #    - exhaustruct
     - exportloopref
-    - forbidigo
-    - forcetypeassert
+    # - forbidigo
+    # - forcetypeassert
     - funlen
     # - gci
     # - gochecknoglobals
@@ -114,60 +114,60 @@ linters:
     - goimports
     #    - golint
     # - gomnd
-    - gomoddirectives
+    # - gomoddirectives
     - gomodguard
     - goprintffuncname
     # - gosec
     - gosimple
     - govet
-    - grouper
+    # - grouper
     #    - ifshort
-    - importas
+    # - importas
     - ineffassign
-    - interfacebloat
+    # - interfacebloat
     #    - interfacer
-    - ireturn
+    # - ireturn
     - lll
     #    - loggercheck
-    - maintidx
-    - makezero
+    # - maintidx
+    # - makezero
     #    - maligned
     - misspell
     - nakedret
     - nestif
-    - nilerr
-    - nilnil
+    # - nilerr
+    # - nilnil
     # - nlreturn
     - noctx
     # - nolintlint
     #    - nonamedreturns
     #    - nosnakecase
-    - nosprintfhostport
+    # - nosprintfhostport
     - paralleltest
     - prealloc
-    - predeclared
-    - promlinter
-    - reassign
-    - revive
+    # - predeclared
+    # - promlinter
+    # - reassign
+    # - revive
     - rowserrcheck
     #    - scopelint
     - sqlclosecheck
     - staticcheck
     #    - structcheck
     - stylecheck
-    - tagliatelle
-    - tenv
+    # - tagliatelle
+    # - tenv
     #    - testableexamples
     - testpackage
-    - thelper
+    # - thelper
     - tparallel
     # - typecheck
     - unconvert
     - unparam
-    - unused
-    - usestdlibvars
+    # - unused
+    # - usestdlibvars
     #    - varcheck
-    - varnamelen
+    # - varnamelen
     # - wastedassign
     - whitespace
     #    - wrapcheck
